@@ -5,7 +5,8 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException
 
-from services.cache import get_cache
+from core.config import load_settings
+from services import gtfs_realtime, gtfs_static
 
 logger = logging.getLogger(__name__)
 
@@ -20,17 +21,24 @@ async def health() -> Dict[str, str]:
 
 @router.get("/api/vehicles")
 async def list_vehicles() -> Dict[str, List[Dict[str, Any]]]:
-    """Return the latest cached vehicle positions."""
-    cache = get_cache()
-    vehicles = await cache.get_vehicles()
+    """Return the latest vehicle positions."""
+    settings = load_settings()
+    vehicles = await gtfs_realtime.fetch_vehicle_positions(
+        settings.GRT_VEHICLE_POSITIONS_URL,
+        allow_weak_tls=settings.GRT_ALLOW_WEAK_TLS,
+    )
     return {"vehicles": vehicles}
 
 
 @router.get("/api/vehicles/{vehicle_id}")
 async def get_vehicle(vehicle_id: str) -> Dict[str, Dict[str, Any]]:
     """Return a single vehicle by its identifier."""
-    cache = get_cache()
-    vehicle = await cache.get_vehicle(vehicle_id)
+    settings = load_settings()
+    vehicles = await gtfs_realtime.fetch_vehicle_positions(
+        settings.GRT_VEHICLE_POSITIONS_URL,
+        allow_weak_tls=settings.GRT_ALLOW_WEAK_TLS,
+    )
+    vehicle = next((item for item in vehicles if item.get("vehicle_id") == vehicle_id), None)
     if not vehicle:
         logger.info("Vehicle not found: %s", vehicle_id)
         raise HTTPException(status_code=404, detail="Vehicle not found")
@@ -40,6 +48,9 @@ async def get_vehicle(vehicle_id: str) -> Dict[str, Dict[str, Any]]:
 @router.get("/api/routes")
 async def list_routes() -> Dict[str, List[Dict[str, Any]]]:
     """Return route metadata from the GTFS static feed."""
-    cache = get_cache()
-    routes = await cache.get_routes()
+    settings = load_settings()
+    routes = await gtfs_static.fetch_static_routes(
+        settings.GRT_GTFS_STATIC_URL,
+        allow_weak_tls=settings.GRT_ALLOW_WEAK_TLS,
+    )
     return {"routes": list(routes.values())}
