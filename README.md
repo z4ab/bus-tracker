@@ -2,6 +2,8 @@
 
 Real-time bus tracking for the Region of Waterloo GRT feeds. This repo includes a FastAPI backend that normalizes GTFS data and a React + Vite frontend that renders live vehicle positions on a map.
 
+<img width="925" height="588" alt="image" src="https://github.com/user-attachments/assets/de166c1a-ab1b-4fbf-a14e-8a82dac98810" />
+
 ## Highlights
 
 - **FastAPI backend** pulls GTFS‑realtime vehicle positions, caches them in memory, and serves a JSON API.
