@@ -1,5 +1,5 @@
-import { useMemo, useRef } from "react";
-import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
+import { useMemo, useRef, useState } from "react";
+import { MapContainer, Marker, Polyline, Popup, TileLayer } from "react-leaflet";
 import L from "leaflet";
 import type { Route, VehiclePosition } from "../api/types";
 
@@ -17,8 +17,38 @@ const buildRouteIndex = (routes: Route[]) => {
   return map;
 };
 
-const buildMarkerHtml = (shortName: string, color: string, textColor: string) => `
+const buildMarkerHtml = (
+  shortName: string,
+  color: string,
+  textColor: string,
+  heading: number | null
+) => {
+  const arrow = Number.isFinite(heading)
+    ? `
+      <div style="
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 0;
+        height: 0;
+        transform: translate(-50%, -50%) rotate(${heading}deg);
+      ">
+        <div style="
+          width: 0;
+          height: 0;
+          border-left: 6px solid transparent;
+          border-right: 6px solid transparent;
+          border-bottom: 10px solid ${textColor};
+          filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.5));
+          transform: translateY(-18px);
+        "></div>
+      </div>
+    `
+    : "";
+
+  return `
   <div style="
+    position: relative;
     background: ${color};
     color: ${textColor};
     border-radius: 999px;
@@ -31,15 +61,31 @@ const buildMarkerHtml = (shortName: string, color: string, textColor: string) =>
     font-size: 12px;
     border: 2px solid #ffffff;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
-  ">${shortName}</div>
+  ">${shortName}${arrow}</div>
 `;
+};
 
 export default function MapView({ positions, routes }: MapViewProps) {
   const routeIndex = useMemo(() => buildRouteIndex(routes), [routes]);
   const iconCache = useRef(new Map<string, L.DivIcon>());
+  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
 
-  const getMarkerIcon = (shortName: string, color: string, textColor: string) => {
-    const cacheKey = `${shortName}-${color}-${textColor}`;
+  const selectedRoute = selectedRouteId ? routeIndex.get(selectedRouteId) : undefined;
+  const selectedRoutePoints = useMemo(() => {
+    if (!selectedRoute?.shape || selectedRoute.shape.length < 2) {
+      return [];
+    }
+    return selectedRoute.shape.map((point) => [point.lat, point.lon] as [number, number]);
+  }, [selectedRoute]);
+
+  const getMarkerIcon = (
+    shortName: string,
+    color: string,
+    textColor: string,
+    heading: number | null
+  ) => {
+    const headingBucket = Number.isFinite(heading) ? Math.round((heading ?? 0) / 10) * 10 : "none";
+    const cacheKey = `${shortName}-${color}-${textColor}-${headingBucket}`;
     const cached = iconCache.current.get(cacheKey);
     if (cached) {
       return cached;
@@ -47,7 +93,7 @@ export default function MapView({ positions, routes }: MapViewProps) {
 
     const icon = L.divIcon({
       className: "route-marker",
-      html: buildMarkerHtml(shortName, color, textColor),
+      html: buildMarkerHtml(shortName, color, textColor, heading),
       iconSize: [32, 32],
       iconAnchor: [16, 16],
     });
@@ -71,15 +117,37 @@ export default function MapView({ positions, routes }: MapViewProps) {
         attribution="&copy; OpenStreetMap contributors"
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
+      {selectedRoutePoints.length > 1 && (
+        <Polyline
+          positions={selectedRoutePoints}
+          pathOptions={{
+            color: selectedRoute?.color ?? "#1976d2",
+            weight: 6,
+            opacity: 0.9,
+          }}
+        />
+      )}
       {validPositions.map((position) => {
         const route = position.routeId ? routeIndex.get(position.routeId) : undefined;
         const shortName = position.routeShortName ?? route?.shortName ?? "?";
         const color = position.routeColor ?? route?.color ?? "#1976d2";
         const textColor = route?.textColor ?? "#ffffff";
-        const icon = getMarkerIcon(shortName, color, textColor);
+        const heading = Number.isFinite(position.heading) ? (position.heading ?? null) : null;
+        const icon = getMarkerIcon(shortName, color, textColor, heading);
 
         return (
-          <Marker key={position.id} position={[position.lat, position.lon]} icon={icon}>
+          <Marker
+            key={position.id}
+            position={[position.lat, position.lon]}
+            icon={icon}
+            eventHandlers={{
+              click: () => {
+                if (position.routeId) {
+                  setSelectedRouteId(position.routeId);
+                }
+              },
+            }}
+          >
             <Popup>
               <div>
                 <strong>Route:</strong> {shortName}

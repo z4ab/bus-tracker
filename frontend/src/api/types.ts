@@ -1,9 +1,16 @@
+export interface RouteShapePoint {
+  lat: number;
+  lon: number;
+  sequence?: number;
+}
+
 export interface Route {
   id: string;
   shortName: string;
   longName?: string;
   color?: string;
   textColor?: string;
+  shape?: RouteShapePoint[];
 }
 
 export interface VehiclePosition {

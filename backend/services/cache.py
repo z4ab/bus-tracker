@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import math
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -20,8 +21,60 @@ class Cache:
         self._vehicles: List[Dict[str, Any]] = []
         self._routes: Dict[str, Dict[str, Any]] = {}
         self._last_updated: Optional[str] = None
+        self._previous_positions: Dict[str, Dict[str, float]] = {}
         self._lock = asyncio.Lock()
         self._task: Optional[asyncio.Task] = None
+
+    def _compute_bearing(
+        self,
+        lat1: float,
+        lon1: float,
+        lat2: float,
+        lon2: float,
+    ) -> Optional[float]:
+        """Compute initial bearing from (lat1, lon1) to (lat2, lon2)."""
+        if lat1 == lat2 and lon1 == lon2:
+            return None
+
+        phi1 = math.radians(lat1)
+        phi2 = math.radians(lat2)
+        delta_lon = math.radians(lon2 - lon1)
+
+        x = math.sin(delta_lon) * math.cos(phi2)
+        y = math.cos(phi1) * math.sin(phi2) - math.sin(phi1) * math.cos(phi2) * math.cos(delta_lon)
+
+        bearing = math.degrees(math.atan2(x, y))
+        return (bearing + 360) % 360
+
+    def _apply_fallback_bearings(self, vehicles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Fill missing bearings using the previous position for each vehicle."""
+        next_previous: Dict[str, Dict[str, float]] = {}
+
+        for vehicle in vehicles:
+            vehicle_id = vehicle.get("vehicle_id")
+            lat = vehicle.get("latitude")
+            lon = vehicle.get("longitude")
+            bearing = vehicle.get("bearing")
+
+            has_position = (
+                isinstance(lat, (int, float))
+                and isinstance(lon, (int, float))
+                and math.isfinite(lat)
+                and math.isfinite(lon)
+            )
+
+            if vehicle_id and has_position:
+                if bearing is None:
+                    previous = self._previous_positions.get(vehicle_id)
+                    if previous:
+                        computed = self._compute_bearing(previous["lat"], previous["lon"], lat, lon)
+                        if computed is not None:
+                            vehicle["bearing"] = computed
+
+                next_previous[vehicle_id] = {"lat": float(lat), "lon": float(lon)}
+
+        self._previous_positions = next_previous
+        return vehicles
 
     async def refresh_once(self) -> None:
         """Refresh vehicle positions and, if missing, static routes."""
@@ -43,6 +96,7 @@ class Cache:
         timestamp = datetime.now(timezone.utc).isoformat()
 
         async with self._lock:
+            vehicles = self._apply_fallback_bearings(vehicles)
             self._vehicles = vehicles
             if routes:
                 self._routes = routes
