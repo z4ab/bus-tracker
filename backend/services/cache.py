@@ -21,8 +21,10 @@ class Cache:
         self._vehicles: List[Dict[str, Any]] = []
         self._routes: Dict[str, Dict[str, Any]] = {}
         self._last_updated: Optional[str] = None
+        self._last_updated_at: Optional[datetime] = None
         self._previous_positions: Dict[str, Dict[str, float]] = {}
         self._lock = asyncio.Lock()
+        self._refresh_lock = asyncio.Lock()
         self._task: Optional[asyncio.Task] = None
 
     def _compute_bearing(
@@ -76,6 +78,34 @@ class Cache:
         self._previous_positions = next_previous
         return vehicles
 
+    async def _needs_refresh(self) -> bool:
+        """Return True when cached data is missing or stale."""
+        refresh_seconds = self._settings.REFRESH_SECONDS
+        if refresh_seconds <= 0:
+            return True
+
+        async with self._lock:
+            last_updated_at = self._last_updated_at
+
+        if last_updated_at is None:
+            return True
+
+        age_seconds = (datetime.now(timezone.utc) - last_updated_at).total_seconds()
+        return age_seconds >= refresh_seconds
+
+    async def ensure_fresh(self) -> None:
+        """Refresh the cache if it's empty or stale."""
+        if not await self._needs_refresh():
+            return
+
+        async with self._refresh_lock:
+            if not await self._needs_refresh():
+                return
+            try:
+                await self.refresh_once()
+            except Exception:
+                logger.exception("On-demand cache refresh failed")
+
     async def refresh_once(self) -> None:
         """Refresh vehicle positions and, if missing, static routes."""
         vehicles: List[Dict[str, Any]] = []
@@ -93,7 +123,8 @@ class Cache:
                 allow_weak_tls=self._settings.GRT_ALLOW_WEAK_TLS,
             )
 
-        timestamp = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(timezone.utc)
+        timestamp = now.isoformat()
 
         async with self._lock:
             vehicles = self._apply_fallback_bearings(vehicles)
@@ -101,6 +132,7 @@ class Cache:
             if routes:
                 self._routes = routes
             self._last_updated = timestamp
+            self._last_updated_at = now
 
     async def _run(self) -> None:
         """Continuously refresh the cache on a fixed interval."""
@@ -131,11 +163,13 @@ class Cache:
 
     async def get_vehicles(self) -> List[Dict[str, Any]]:
         """Return a snapshot of the latest vehicle list."""
+        await self.ensure_fresh()
         async with self._lock:
             return list(self._vehicles)
 
     async def get_vehicle(self, vehicle_id: str) -> Optional[Dict[str, Any]]:
         """Return a single vehicle entry by ID, if present."""
+        await self.ensure_fresh()
         async with self._lock:
             for vehicle in self._vehicles:
                 if vehicle.get("vehicle_id") == vehicle_id:
@@ -144,6 +178,7 @@ class Cache:
 
     async def get_routes(self) -> Dict[str, Dict[str, Any]]:
         """Return a snapshot of the route metadata map."""
+        await self.ensure_fresh()
         async with self._lock:
             return {route_id: dict(info) for route_id, info in self._routes.items()}
 
