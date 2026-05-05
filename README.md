@@ -57,7 +57,7 @@ Required:
 
 Optional:
 
-- `GRT_TRIP_UPDATES_URL` — trip updates feed URL (not used yet).
+- `GRT_TRIP_UPDATES_URL` — trip updates feed URL (required for arrival predictions).
 - `GRT_ALERTS_URL` — alerts feed URL (not used yet).
 - `REFRESH_SECONDS` — refresh interval in seconds (default: 30).
 - `GRT_ALLOW_WEAK_TLS` — allow weak TLS parameters for feeds (use only if required).
@@ -67,6 +67,7 @@ Optional:
 - `GET /health`
 - `GET /api/vehicles`
 - `GET /api/vehicles/{vehicle_id}`
+- `GET /api/vehicles/{vehicle_id}/arrivals`
 - `GET /api/routes`
 
 ## Frontend behavior

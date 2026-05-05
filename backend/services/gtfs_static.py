@@ -34,19 +34,57 @@ def _parse_routes(routes_bytes: bytes) -> Dict[str, Dict[str, Any]]:
         route_id = row.get("route_id")
         if not route_id:
             continue
-        route_short_name = row.get("route_short_name") or row.get("route_long_name")
+        route_long_name = row.get("route_long_name") or None
+        route_short_name = row.get("route_short_name") or route_long_name
         route_color = row.get("route_color") or None
+        route_text_color = row.get("route_text_color") or None
+
         # Normalize colors to CSS-friendly hex strings if present.
         if route_color and not route_color.startswith("#"):
             route_color = f"#{route_color}"
+        if route_text_color and not route_text_color.startswith("#"):
+            route_text_color = f"#{route_text_color}"
 
         routes[route_id] = {
             "route_id": route_id,
             "route_short_name": route_short_name,
+            "route_long_name": route_long_name,
             "route_color": route_color,
+            "route_text_color": route_text_color,
         }
 
     return routes
+
+
+def _parse_stops(stops_bytes: bytes) -> Dict[str, Dict[str, Any]]:
+    """Parse stops.txt into a stop metadata dictionary."""
+    stops: Dict[str, Dict[str, Any]] = {}
+    for row in _read_csv_bytes(stops_bytes):
+        stop_id = row.get("stop_id")
+        if not stop_id:
+            continue
+        stop_name = row.get("stop_name") or row.get("stop_desc") or None
+        lat_raw = row.get("stop_lat")
+        lon_raw = row.get("stop_lon")
+
+        stop_lat = None
+        stop_lon = None
+        if lat_raw not in (None, "") and lon_raw not in (None, ""):
+            try:
+                stop_lat = float(lat_raw)
+                stop_lon = float(lon_raw)
+            except ValueError:
+                stop_lat = None
+                stop_lon = None
+
+        stops[stop_id] = {
+            "stop_id": stop_id,
+            "stop_name": stop_name,
+            "stop_lat": stop_lat,
+            "stop_lon": stop_lon,
+        }
+
+    return stops
 
 
 def _parse_trips(trips_bytes: bytes) -> Dict[str, str]:
@@ -90,14 +128,19 @@ def _parse_shapes(shapes_bytes: bytes) -> Dict[str, List[Dict[str, Any]]]:
     return shapes
 
 
-def parse_gtfs_static_zip(zip_bytes: bytes) -> Dict[str, Dict[str, Any]]:
-    """Parse a GTFS zip file and return route metadata keyed by route_id."""
+def parse_gtfs_static_bundle(zip_bytes: bytes) -> Dict[str, Dict[str, Any]]:
+    """Parse a GTFS zip file and return routes and stops metadata."""
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
         routes_name = _get_member_name(zf, "routes.txt")
         if not routes_name:
             raise RuntimeError("GTFS static feed is missing routes.txt")
 
         routes = _parse_routes(zf.read(routes_name))
+
+        stops: Dict[str, Dict[str, Any]] = {}
+        stops_name = _get_member_name(zf, "stops.txt")
+        if stops_name:
+            stops = _parse_stops(zf.read(stops_name))
 
         trips_name = _get_member_name(zf, "trips.txt")
         shapes_name = _get_member_name(zf, "shapes.txt")
@@ -108,15 +151,20 @@ def parse_gtfs_static_zip(zip_bytes: bytes) -> Dict[str, Dict[str, Any]]:
                 if route_id in routes and shape_id in shapes:
                     routes[route_id]["shape"] = shapes[shape_id]
 
-        return routes
+        return {"routes": routes, "stops": stops}
 
 
-async def fetch_static_routes(
+def parse_gtfs_static_zip(zip_bytes: bytes) -> Dict[str, Dict[str, Any]]:
+    """Parse a GTFS zip file and return route metadata keyed by route_id."""
+    return parse_gtfs_static_bundle(zip_bytes)["routes"]
+
+
+async def fetch_static_bundle(
     url: str,
     timeout_s: float = 20.0,
     allow_weak_tls: bool = False,
 ) -> Dict[str, Dict[str, Any]]:
-    """Fetch the GTFS static feed and return parsed routes."""
+    """Fetch the GTFS static feed and return routes and stops metadata."""
     if not url:
         raise ValueError("GTFS static URL is required")
 
@@ -129,7 +177,31 @@ async def fetch_static_routes(
         raise
 
     try:
-        return parse_gtfs_static_zip(response.content)
+        return parse_gtfs_static_bundle(response.content)
     except Exception:
         logger.exception("Failed to parse GTFS static feed from %s", url)
         raise
+
+
+async def fetch_static_routes(
+    url: str,
+    timeout_s: float = 20.0,
+    allow_weak_tls: bool = False,
+) -> Dict[str, Dict[str, Any]]:
+    """Fetch the GTFS static feed and return parsed routes."""
+    bundle = await fetch_static_bundle(
+        url, timeout_s=timeout_s, allow_weak_tls=allow_weak_tls
+    )
+    return bundle["routes"]
+
+
+async def fetch_static_stops(
+    url: str,
+    timeout_s: float = 20.0,
+    allow_weak_tls: bool = False,
+) -> Dict[str, Dict[str, Any]]:
+    """Fetch the GTFS static feed and return parsed stops."""
+    bundle = await fetch_static_bundle(
+        url, timeout_s=timeout_s, allow_weak_tls=allow_weak_tls
+    )
+    return bundle["stops"]

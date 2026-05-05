@@ -20,7 +20,7 @@ Required:
 - `GRT_GTFS_STATIC_URL` — GTFS static zip URL.
 
 Optional:
-- `GRT_TRIP_UPDATES_URL` — trip updates feed URL (not used yet).
+- `GRT_TRIP_UPDATES_URL` — trip updates feed URL (required for arrival predictions).
 - `GRT_ALERTS_URL` — alerts feed URL (not used yet).
 - `REFRESH_SECONDS` — refresh interval in seconds (default: 30).
 - `GRT_ALLOW_WEAK_TLS` — set to true to allow weak DH parameters for GTFS fetches (use only if required by the feed).
@@ -38,6 +38,7 @@ CORS is enabled for the local Vite dev server (`http://localhost:5173`). If you 
 - `GET /health`
 - `GET /api/vehicles`
 - `GET /api/vehicles/{vehicle_id}`
+- `GET /api/vehicles/{vehicle_id}/arrivals`
 - `GET /api/routes`
 
 ## Linting & formatting

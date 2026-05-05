@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.routes import router as api_router
+from services.cache import get_cache
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,5 +32,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def startup() -> None:
+    """Start the background cache refresh task."""
+    get_cache().start()
+
+
+@app.on_event("shutdown")
+async def shutdown() -> None:
+    """Stop the background cache refresh task."""
+    await get_cache().stop()
+
 
 app.include_router(api_router)

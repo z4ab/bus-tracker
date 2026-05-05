@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { MapContainer, Marker, Polyline, Popup, TileLayer } from "react-leaflet";
 import L from "leaflet";
 import type { Route, VehiclePosition } from "../api/types";
+import { useVehicleArrivals } from "../hooks/useVehicleArrivals";
 
 interface MapViewProps {
   positions: VehiclePosition[];
@@ -65,10 +66,19 @@ const buildMarkerHtml = (
 `;
 };
 
+const formatMinutes = (minutes: number) => {
+  if (minutes <= 0) {
+    return "due";
+  }
+  return `${minutes} min`;
+};
+
 export default function MapView({ positions, routes }: MapViewProps) {
   const routeIndex = useMemo(() => buildRouteIndex(routes), [routes]);
   const iconCache = useRef(new Map<string, L.DivIcon>());
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+  const arrivalsQuery = useVehicleArrivals(selectedVehicleId);
 
   const selectedRoute = selectedRouteId ? routeIndex.get(selectedRouteId) : undefined;
   const selectedRoutePoints = useMemo(() => {
@@ -105,6 +115,30 @@ export default function MapView({ positions, routes }: MapViewProps) {
   const validPositions = positions.filter(
     (position) => Number.isFinite(position.lat) && Number.isFinite(position.lon)
   );
+
+  const upcomingStops = useMemo(() => {
+    if (!arrivalsQuery.data) {
+      return [];
+    }
+    const nowSeconds = Date.now() / 1000;
+    return arrivalsQuery.data.stops
+      .map((stop) => {
+        const predictedTime = stop.arrivalTime ?? stop.departureTime ?? null;
+        if (!predictedTime) {
+          return null;
+        }
+        const minutesAway = Math.round((predictedTime - nowSeconds) / 60);
+        return {
+          ...stop,
+          predictedTime,
+          minutesAway,
+        };
+      })
+      .filter((stop): stop is Exclude<typeof stop, null> => Boolean(stop))
+      .filter((stop) => stop.predictedTime >= nowSeconds - 60)
+      .sort((a, b) => a.predictedTime - b.predictedTime)
+      .slice(0, 5);
+  }, [arrivalsQuery.data]);
 
   return (
     <MapContainer
@@ -145,15 +179,49 @@ export default function MapView({ positions, routes }: MapViewProps) {
                 if (position.routeId) {
                   setSelectedRouteId(position.routeId);
                 }
+                setSelectedVehicleId(position.id);
               },
             }}
           >
             <Popup>
-              <div>
-                <strong>Route:</strong> {shortName}
-              </div>
-              <div>
-                <strong>Vehicle ID:</strong> {position.id}
+              <div style={{ minWidth: "180px" }}>
+                <div>
+                  <strong>Route:</strong> {shortName}
+                </div>
+                <div>
+                  <strong>Vehicle ID:</strong> {position.id}
+                </div>
+                {selectedVehicleId === position.id && (
+                  <div style={{ marginTop: "8px" }}>
+                    <div style={{ fontWeight: 600, marginBottom: "4px" }}>Next stops</div>
+                    {arrivalsQuery.isLoading && <div>Loading arrivals...</div>}
+                    {arrivalsQuery.error && (
+                      <div style={{ color: "#b00020" }}>Arrivals unavailable</div>
+                    )}
+                    {!arrivalsQuery.isLoading && !arrivalsQuery.error && (
+                      <div>
+                        {upcomingStops.length > 0 ? (
+                          <ul style={{ margin: 0, paddingLeft: "16px" }}>
+                            {upcomingStops.map((stop, index) => (
+                              <li key={`${stop.stopId ?? "stop"}-${stop.stopSequence ?? index}`}>
+                                <div>{stop.stopName ?? stop.stopId ?? "Unknown stop"}</div>
+                                <div style={{ fontSize: "12px", color: "#555" }}>
+                                  {formatMinutes(stop.minutesAway)} ·{" "}
+                                  {new Date(stop.predictedTime * 1000).toLocaleTimeString([], {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <div>No arrival predictions yet.</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </Popup>
           </Marker>

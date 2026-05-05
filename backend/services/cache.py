@@ -20,6 +20,8 @@ class Cache:
         self._settings = settings
         self._vehicles: List[Dict[str, Any]] = []
         self._routes: Dict[str, Dict[str, Any]] = {}
+        self._stops: Dict[str, Dict[str, Any]] = {}
+        self._trip_updates: List[Dict[str, Any]] = []
         self._last_updated: Optional[str] = None
         self._last_updated_at: Optional[datetime] = None
         self._previous_positions: Dict[str, Dict[str, float]] = {}
@@ -43,12 +45,16 @@ class Cache:
         delta_lon = math.radians(lon2 - lon1)
 
         x = math.sin(delta_lon) * math.cos(phi2)
-        y = math.cos(phi1) * math.sin(phi2) - math.sin(phi1) * math.cos(phi2) * math.cos(delta_lon)
+        y = math.cos(phi1) * math.sin(phi2) - math.sin(phi1) * math.cos(
+            phi2
+        ) * math.cos(delta_lon)
 
         bearing = math.degrees(math.atan2(x, y))
         return (bearing + 360) % 360
 
-    def _apply_fallback_bearings(self, vehicles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _apply_fallback_bearings(
+        self, vehicles: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
         """Fill missing bearings using the previous position for each vehicle."""
         next_previous: Dict[str, Dict[str, float]] = {}
 
@@ -69,7 +75,9 @@ class Cache:
                 if bearing is None:
                     previous = self._previous_positions.get(vehicle_id)
                     if previous:
-                        computed = self._compute_bearing(previous["lat"], previous["lon"], lat, lon)
+                        computed = self._compute_bearing(
+                            previous["lat"], previous["lon"], lat, lon
+                        )
                         if computed is not None:
                             vehicle["bearing"] = computed
 
@@ -107,21 +115,34 @@ class Cache:
                 logger.exception("On-demand cache refresh failed")
 
     async def refresh_once(self) -> None:
-        """Refresh vehicle positions and, if missing, static routes."""
+        """Refresh vehicle positions, trip updates, and static data."""
         vehicles: List[Dict[str, Any]] = []
         routes: Dict[str, Dict[str, Any]] = {}
+        stops: Dict[str, Dict[str, Any]] = {}
+        trip_updates: Optional[List[Dict[str, Any]]] = None
 
         vehicles = await gtfs_realtime.fetch_vehicle_positions(
             self._settings.GRT_VEHICLE_POSITIONS_URL,
             allow_weak_tls=self._settings.GRT_ALLOW_WEAK_TLS,
         )
 
+        if self._settings.GRT_TRIP_UPDATES_URL:
+            try:
+                trip_updates = await gtfs_realtime.fetch_trip_updates(
+                    self._settings.GRT_TRIP_UPDATES_URL,
+                    allow_weak_tls=self._settings.GRT_ALLOW_WEAK_TLS,
+                )
+            except Exception:
+                logger.exception("Failed to fetch GTFS-realtime trip updates")
+
         # Static data changes infrequently; only fetch once per process.
-        if not self._routes:
-            routes = await gtfs_static.fetch_static_routes(
+        if not self._routes or not self._stops:
+            bundle = await gtfs_static.fetch_static_bundle(
                 self._settings.GRT_GTFS_STATIC_URL,
                 allow_weak_tls=self._settings.GRT_ALLOW_WEAK_TLS,
             )
+            routes = bundle.get("routes", {})
+            stops = bundle.get("stops", {})
 
         now = datetime.now(timezone.utc)
         timestamp = now.isoformat()
@@ -129,8 +150,12 @@ class Cache:
         async with self._lock:
             vehicles = self._apply_fallback_bearings(vehicles)
             self._vehicles = vehicles
+            if trip_updates is not None:
+                self._trip_updates = trip_updates
             if routes:
                 self._routes = routes
+            if stops:
+                self._stops = stops
             self._last_updated = timestamp
             self._last_updated_at = now
 
@@ -181,6 +206,18 @@ class Cache:
         await self.ensure_fresh()
         async with self._lock:
             return {route_id: dict(info) for route_id, info in self._routes.items()}
+
+    async def get_stops(self) -> Dict[str, Dict[str, Any]]:
+        """Return a snapshot of the stop metadata map."""
+        await self.ensure_fresh()
+        async with self._lock:
+            return {stop_id: dict(info) for stop_id, info in self._stops.items()}
+
+    async def get_trip_updates(self) -> List[Dict[str, Any]]:
+        """Return a snapshot of the latest trip updates."""
+        await self.ensure_fresh()
+        async with self._lock:
+            return [dict(update) for update in self._trip_updates]
 
     async def get_last_updated(self) -> Optional[str]:
         """Return the last refresh timestamp in ISO 8601 format."""

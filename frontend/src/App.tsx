@@ -11,7 +11,7 @@ import {
   ListItem,
   ListItemText,
   Toolbar,
-  Typography
+  Typography,
 } from "@mui/material";
 import MapView from "./components/MapView";
 import { useRoutes } from "./hooks/useRoutes";
@@ -78,8 +78,8 @@ export default function App() {
           onClose={() => setPanelOpen(false)}
           sx={{
             "& .MuiDrawer-paper": {
-              width: drawerWidth
-            }
+              width: drawerWidth,
+            },
           }}
         >
           <Box sx={{ p: 2 }}>
@@ -116,7 +116,7 @@ export default function App() {
                 height: "100%",
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "center"
+                justifyContent: "center",
               }}
             >
               <CircularProgress />

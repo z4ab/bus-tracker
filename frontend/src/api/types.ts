@@ -23,3 +23,22 @@ export interface VehiclePosition {
   updatedAt?: string;
   heading?: number;
 }
+
+export interface VehicleArrivalStop {
+  stopId?: string;
+  stopName?: string;
+  stopSequence?: number;
+  arrivalTime?: number;
+  arrivalDelay?: number;
+  departureTime?: number;
+  departureDelay?: number;
+}
+
+export interface VehicleArrivals {
+  vehicleId: string;
+  tripId?: string;
+  routeId?: string;
+  feedTimestamp?: number;
+  updatedAt?: string;
+  stops: VehicleArrivalStop[];
+}
