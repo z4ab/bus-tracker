@@ -5,6 +5,8 @@ import type { VehicleArrivals, VehicleArrivalStop } from "../api/types";
 type VehicleArrivalStopApi = {
   stop_id?: string | null;
   stop_name?: string | null;
+  stop_lat?: number | null;
+  stop_lon?: number | null;
   stop_sequence?: number | null;
   arrival_time?: number | null;
   arrival_delay?: number | null;
@@ -24,11 +26,13 @@ type VehicleArrivalsApi = {
 const toStop = (raw: VehicleArrivalStopApi): VehicleArrivalStop => ({
   stopId: raw.stop_id ?? undefined,
   stopName: raw.stop_name ?? undefined,
+  stopLat: raw.stop_lat ?? undefined,
+  stopLon: raw.stop_lon ?? undefined,
   stopSequence: raw.stop_sequence ?? undefined,
   arrivalTime: raw.arrival_time ?? undefined,
   arrivalDelay: raw.arrival_delay ?? undefined,
   departureTime: raw.departure_time ?? undefined,
-  departureDelay: raw.departure_delay ?? undefined
+  departureDelay: raw.departure_delay ?? undefined,
 });
 
 const toArrivals = (raw: VehicleArrivalsApi): VehicleArrivals => ({
@@ -37,7 +41,7 @@ const toArrivals = (raw: VehicleArrivalsApi): VehicleArrivals => ({
   routeId: raw.route_id ?? undefined,
   feedTimestamp: raw.feed_timestamp ?? undefined,
   updatedAt: raw.updated_at ?? undefined,
-  stops: raw.stops.map(toStop)
+  stops: raw.stops.map(toStop),
 });
 
 const fetchVehicleArrivals = async (vehicleId: string) => {
@@ -52,5 +56,5 @@ export const useVehicleArrivals = (vehicleId: string | null) =>
     queryFn: () => fetchVehicleArrivals(vehicleId ?? ""),
     enabled: Boolean(vehicleId),
     staleTime: 10000,
-    refetchInterval: 10000
+    refetchInterval: 10000,
   });

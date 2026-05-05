@@ -86,9 +86,21 @@ async def get_vehicle_arrivals(vehicle_id: str) -> Dict[str, Any]:
     for stop_update in update.get("stop_time_updates", []):
         stop_id = stop_update.get("stop_id")
         stop_name = None
+        stop_lat = None
+        stop_lon = None
         if stop_id:
-            stop_name = stops_index.get(stop_id, {}).get("stop_name")
-        stops.append({**stop_update, "stop_name": stop_name})
+            stop_info = stops_index.get(stop_id, {})
+            stop_name = stop_info.get("stop_name")
+            stop_lat = stop_info.get("stop_lat")
+            stop_lon = stop_info.get("stop_lon")
+        stops.append(
+            {
+                **stop_update,
+                "stop_name": stop_name,
+                "stop_lat": stop_lat,
+                "stop_lon": stop_lon,
+            }
+        )
 
     return {
         "vehicle_id": vehicle_id,

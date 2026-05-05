@@ -66,6 +66,34 @@ const buildMarkerHtml = (
 `;
 };
 
+const buildStopMarkerHtml = (label: string) => `
+  <div style="
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transform: translate(-6px, -6px);
+  ">
+    <div style="
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      background: #ffffff;
+      border: 2px solid #1976d2;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+    "></div>
+    <div style="
+      background: #ffffff;
+      color: #111827;
+      border-radius: 10px;
+      padding: 2px 6px;
+      font-size: 12px;
+      font-weight: 600;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+      white-space: nowrap;
+    ">${label}</div>
+  </div>
+`;
+
 const formatMinutes = (minutes: number) => {
   if (minutes <= 0) {
     return "due";
@@ -76,6 +104,7 @@ const formatMinutes = (minutes: number) => {
 export default function MapView({ positions, routes }: MapViewProps) {
   const routeIndex = useMemo(() => buildRouteIndex(routes), [routes]);
   const iconCache = useRef(new Map<string, L.DivIcon>());
+  const stopIconCache = useRef(new Map<string, L.DivIcon>());
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   const arrivalsQuery = useVehicleArrivals(selectedVehicleId);
@@ -112,6 +141,24 @@ export default function MapView({ positions, routes }: MapViewProps) {
     return icon;
   };
 
+  const getStopIcon = (label: string) => {
+    const cacheKey = label;
+    const cached = stopIconCache.current.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const icon = L.divIcon({
+      className: "stop-marker",
+      html: buildStopMarkerHtml(label),
+      iconSize: [60, 24],
+      iconAnchor: [6, 12],
+    });
+
+    stopIconCache.current.set(cacheKey, icon);
+    return icon;
+  };
+
   const validPositions = positions.filter(
     (position) => Number.isFinite(position.lat) && Number.isFinite(position.lon)
   );
@@ -140,6 +187,16 @@ export default function MapView({ positions, routes }: MapViewProps) {
       .slice(0, 5);
   }, [arrivalsQuery.data]);
 
+  const upcomingStopsWithCoords = useMemo(() => {
+    return upcomingStops.filter(
+      (stop): stop is typeof stop & { stopLat: number; stopLon: number } =>
+        typeof stop.stopLat === "number" &&
+        Number.isFinite(stop.stopLat) &&
+        typeof stop.stopLon === "number" &&
+        Number.isFinite(stop.stopLon)
+    );
+  }, [upcomingStops]);
+
   return (
     <MapContainer
       center={defaultCenter}
@@ -161,6 +218,26 @@ export default function MapView({ positions, routes }: MapViewProps) {
           }}
         />
       )}
+      {selectedVehicleId &&
+        upcomingStopsWithCoords.map((stop, index) => {
+          const label = formatMinutes(stop.minutesAway);
+          const icon = getStopIcon(label);
+          return (
+            <Marker
+              key={`${stop.stopId ?? "stop"}-${stop.stopSequence ?? index}`}
+              position={[stop.stopLat, stop.stopLon]}
+              icon={icon}
+              zIndexOffset={300}
+            >
+              <Popup>
+                <div>
+                  <strong>{stop.stopName ?? stop.stopId ?? "Stop"}</strong>
+                </div>
+                <div>{label} away</div>
+              </Popup>
+            </Marker>
+          );
+        })}
       {validPositions.map((position) => {
         const route = position.routeId ? routeIndex.get(position.routeId) : undefined;
         const shortName = position.routeShortName ?? route?.shortName ?? "?";

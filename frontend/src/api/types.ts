@@ -27,6 +27,8 @@ export interface VehiclePosition {
 export interface VehicleArrivalStop {
   stopId?: string;
   stopName?: string;
+  stopLat?: number;
+  stopLon?: number;
   stopSequence?: number;
   arrivalTime?: number;
   arrivalDelay?: number;
