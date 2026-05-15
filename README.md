@@ -75,3 +75,5 @@ Optional:
 - Polls `/api/vehicles` every 10 seconds and `/api/routes` every 60 seconds.
 - Renders vehicles as colored route markers on an OpenStreetMap tile layer.
 - Clicking a marker highlights the selected route and draws its GTFS shape (when available).
+
+For container deployments, the frontend Nginx proxy target is runtime-configurable via `NGINX_API_UPSTREAM` (default `backend:80`).
