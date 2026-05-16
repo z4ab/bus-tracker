@@ -4,6 +4,7 @@ Configures logging, CORS for the local Vite dev server, and starts the refresh c
 """
 
 import logging
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,12 +19,17 @@ logging.basicConfig(
 
 app = FastAPI(title="Bus Tracker API")
 
-# Allow local Vite dev server origins during development.
+# Allow local Vite dev server origins during development, the existing Vercel
+# deployment, and the Railway production frontend (read from FRONTEND_ORIGIN).
 cors_origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "https://bus-tracker-murex-psi.vercel.app",
 ]
+
+frontend_origin = os.environ.get("FRONTEND_ORIGIN", "").strip()
+if frontend_origin and frontend_origin not in cors_origins:
+    cors_origins.append(frontend_origin)
 
 app.add_middleware(
     CORSMiddleware,
