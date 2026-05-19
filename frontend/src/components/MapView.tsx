@@ -235,51 +235,6 @@ export default function MapView({ positions, routes }: MapViewProps) {
               },
             }}
           >
-            <Popup>
-              <div className="min-w-48 text-sm">
-                <div>
-                  <strong className="text-gray-900">Route:</strong> {shortName}
-                </div>
-                <div className="text-gray-700">
-                  <strong className="text-gray-900">Vehicle ID:</strong> {position.id}
-                </div>
-                {selectedVehicleId === position.id && (
-                  <div className="mt-3 pt-3 border-t border-gray-200">
-                    <div className="font-semibold text-gray-900 mb-2">Next stops</div>
-                    {arrivalsQuery.isLoading && (
-                      <div className="text-gray-600">Loading arrivals...</div>
-                    )}
-                    {arrivalsQuery.error && (
-                      <div className="text-red-600">Arrivals unavailable</div>
-                    )}
-                    {!arrivalsQuery.isLoading && !arrivalsQuery.error && (
-                      <div>
-                        {upcomingStops.length > 0 ? (
-                          <ul className="list-disc list-inside space-y-1">
-                            {upcomingStops.map((stop, index) => (
-                              <li key={`${stop.stopId ?? "stop"}-${stop.stopSequence ?? index}`}>
-                                <div className="text-gray-900">
-                                  {stop.stopName ?? stop.stopId ?? "Unknown stop"}
-                                </div>
-                                <div className="text-xs text-gray-500 ml-5">
-                                  {formatMinutes(stop.minutesAway)} ·{" "}
-                                  {new Date(stop.predictedTime * 1000).toLocaleTimeString([], {
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  })}
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <div className="text-gray-600">No arrival predictions yet.</div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </Popup>
           </Marker>
         );
       })}
