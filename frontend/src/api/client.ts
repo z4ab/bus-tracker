@@ -20,8 +20,8 @@ export async function apiGet<T>(path: string): Promise<T> {
   const url = buildApiUrl(path);
   const response = await fetch(url, {
     headers: {
-      Accept: "application/json"
-    }
+      Accept: "application/json",
+    },
   });
 
   if (!response.ok) {

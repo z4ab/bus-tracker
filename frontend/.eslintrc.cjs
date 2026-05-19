@@ -2,7 +2,7 @@ module.exports = {
   root: true,
   env: {
     browser: true,
-    es2022: true
+    es2022: true,
   },
   parser: "@typescript-eslint/parser",
   plugins: ["@typescript-eslint", "react", "react-hooks", "react-refresh"],
@@ -12,15 +12,15 @@ module.exports = {
     "plugin:react/recommended",
     "plugin:react-hooks/recommended",
     "plugin:react-refresh/recommended",
-    "prettier"
+    "prettier",
   ],
   settings: {
     react: {
-      version: "detect"
-    }
+      version: "detect",
+    },
   },
   rules: {
-    "react/react-in-jsx-scope": "off"
+    "react/react-in-jsx-scope": "off",
   },
-  ignorePatterns: ["dist", "node_modules"]
+  ignorePatterns: ["dist", "node_modules"],
 };

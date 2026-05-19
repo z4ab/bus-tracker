@@ -202,7 +202,7 @@ export default function MapView({ positions, routes }: MapViewProps) {
       center={defaultCenter}
       zoom={defaultZoom}
       scrollWheelZoom
-      style={{ height: "100%" }}
+      className="h-full w-full"
     >
       <TileLayer
         attribution="&copy; OpenStreetMap contributors"
@@ -230,10 +230,12 @@ export default function MapView({ positions, routes }: MapViewProps) {
               zIndexOffset={300}
             >
               <Popup>
-                <div>
-                  <strong>{stop.stopName ?? stop.stopId ?? "Stop"}</strong>
+                <div className="text-sm">
+                  <div className="font-semibold text-gray-900">
+                    {stop.stopName ?? stop.stopId ?? "Stop"}
+                  </div>
+                  <div className="text-gray-600">{label} away</div>
                 </div>
-                <div>{label} away</div>
               </Popup>
             </Marker>
           );
@@ -261,28 +263,32 @@ export default function MapView({ positions, routes }: MapViewProps) {
             }}
           >
             <Popup>
-              <div style={{ minWidth: "180px" }}>
+              <div className="min-w-48 text-sm">
                 <div>
-                  <strong>Route:</strong> {shortName}
+                  <strong className="text-gray-900">Route:</strong> {shortName}
                 </div>
-                <div>
-                  <strong>Vehicle ID:</strong> {position.id}
+                <div className="text-gray-700">
+                  <strong className="text-gray-900">Vehicle ID:</strong> {position.id}
                 </div>
                 {selectedVehicleId === position.id && (
-                  <div style={{ marginTop: "8px" }}>
-                    <div style={{ fontWeight: 600, marginBottom: "4px" }}>Next stops</div>
-                    {arrivalsQuery.isLoading && <div>Loading arrivals...</div>}
+                  <div className="mt-3 pt-3 border-t border-gray-200">
+                    <div className="font-semibold text-gray-900 mb-2">Next stops</div>
+                    {arrivalsQuery.isLoading && (
+                      <div className="text-gray-600">Loading arrivals...</div>
+                    )}
                     {arrivalsQuery.error && (
-                      <div style={{ color: "#b00020" }}>Arrivals unavailable</div>
+                      <div className="text-red-600">Arrivals unavailable</div>
                     )}
                     {!arrivalsQuery.isLoading && !arrivalsQuery.error && (
                       <div>
                         {upcomingStops.length > 0 ? (
-                          <ul style={{ margin: 0, paddingLeft: "16px" }}>
+                          <ul className="list-disc list-inside space-y-1">
                             {upcomingStops.map((stop, index) => (
                               <li key={`${stop.stopId ?? "stop"}-${stop.stopSequence ?? index}`}>
-                                <div>{stop.stopName ?? stop.stopId ?? "Unknown stop"}</div>
-                                <div style={{ fontSize: "12px", color: "#555" }}>
+                                <div className="text-gray-900">
+                                  {stop.stopName ?? stop.stopId ?? "Unknown stop"}
+                                </div>
+                                <div className="text-xs text-gray-500 ml-5">
                                   {formatMinutes(stop.minutesAway)} ·{" "}
                                   {new Date(stop.predictedTime * 1000).toLocaleTimeString([], {
                                     hour: "2-digit",
@@ -293,7 +299,7 @@ export default function MapView({ positions, routes }: MapViewProps) {
                             ))}
                           </ul>
                         ) : (
-                          <div>No arrival predictions yet.</div>
+                          <div className="text-gray-600">No arrival predictions yet.</div>
                         )}
                       </div>
                     )}

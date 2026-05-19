@@ -1,24 +1,8 @@
 import { useMemo, useState } from "react";
-import {
-  Alert,
-  AppBar,
-  Box,
-  Button,
-  CircularProgress,
-  Divider,
-  Drawer,
-  List,
-  ListItem,
-  ListItemText,
-  Toolbar,
-  Typography,
-} from "@mui/material";
 import MapView from "./components/MapView";
 import { useRoutes } from "./hooks/useRoutes";
 import { useVehiclePositions } from "./hooks/useVehiclePositions";
 import type { Route } from "./api/types";
-
-const drawerWidth = 280;
 
 const getErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "Something went wrong.";
@@ -59,73 +43,68 @@ export default function App() {
   const error = routesQuery.error ?? positionsQuery.error;
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <AppBar position="static">
-        <Toolbar>
-          <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            Bus Tracker
-          </Typography>
-          <Button color="inherit" onClick={() => setPanelOpen(true)}>
+    <div className="flex flex-col h-full">
+      <header className="bg-blue-600 text-white shadow-md">
+        <div className="flex items-center justify-between px-6 py-4">
+          <h1 className="text-xl font-semibold">Bus Tracker</h1>
+          <button
+            onClick={() => setPanelOpen(true)}
+            className="px-4 py-2 bg-blue-700 hover:bg-blue-800 rounded text-sm font-medium transition-colors"
+          >
             Panel
-          </Button>
-        </Toolbar>
-      </AppBar>
+          </button>
+        </div>
+      </header>
 
-      <Box sx={{ display: "flex", flex: 1, minHeight: 0 }}>
-        <Drawer
-          anchor="left"
-          open={panelOpen}
-          onClose={() => setPanelOpen(false)}
-          sx={{
-            "& .MuiDrawer-paper": {
-              width: drawerWidth,
-            },
-          }}
+      <div className="flex flex-1 min-h-0">
+        {/* Sidebar Drawer */}
+        <div
+          className={`fixed inset-0 z-40 bg-black/50 transition-opacity ${
+            panelOpen ? "opacity-100" : "pointer-events-none opacity-0"
+          }`}
+          onClick={() => setPanelOpen(false)}
+        />
+        <aside
+          className={`absolute left-0 top-0 h-full w-72 bg-white shadow-lg transform transition-transform z-50 ${
+            panelOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
         >
-          <Box sx={{ p: 2 }}>
-            <Typography variant="h6">Overview</Typography>
-            <Typography variant="body2" color="text.secondary">
-              Vehicles: {positions.length}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Routes: {routes.length}
-            </Typography>
-          </Box>
-          <Divider />
-          <List dense>
-            {routeSummaries.map((route) => (
-              <ListItem key={route.id}>
-                <ListItemText
-                  primary={route.shortName}
-                  secondary={`${route.count} vehicle${route.count === 1 ? "" : "s"}`}
-                />
-              </ListItem>
-            ))}
-          </List>
-        </Drawer>
+          <div className="p-4">
+            <h2 className="text-lg font-semibold text-gray-900">Overview</h2>
+            <p className="text-sm text-gray-600 mt-1">Vehicles: {positions.length}</p>
+            <p className="text-sm text-gray-600">Routes: {routes.length}</p>
+          </div>
+          <div className="border-t border-gray-200" />
+          <nav className="overflow-y-auto">
+            <ul className="divide-y divide-gray-200">
+              {routeSummaries.map((route) => (
+                <li key={route.id} className="px-4 py-3 hover:bg-gray-50">
+                  <p className="font-medium text-gray-900">{route.shortName}</p>
+                  <p className="text-xs text-gray-500">
+                    {route.count} vehicle{route.count === 1 ? "" : "s"}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        </aside>
 
-        <Box sx={{ flex: 1, minWidth: 0, position: "relative" }}>
+        {/* Main Content */}
+        <div className="flex-1 relative min-w-0">
           {error && (
-            <Box sx={{ p: 2 }}>
-              <Alert severity="error">{getErrorMessage(error)}</Alert>
-            </Box>
+            <div className="absolute top-0 left-0 right-0 p-4 bg-red-50 border-l-4 border-red-400 z-10">
+              <p className="text-red-700 text-sm">{getErrorMessage(error)}</p>
+            </div>
           )}
           {loading ? (
-            <Box
-              sx={{
-                height: "100%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <CircularProgress />
-            </Box>
+            <div className="h-full flex items-center justify-center bg-gray-100">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
+            </div>
           ) : (
             <MapView positions={positions} routes={routes} />
           )}
-        </Box>
-      </Box>
-    </Box>
+        </div>
+      </div>
+    </div>
   );
 }
