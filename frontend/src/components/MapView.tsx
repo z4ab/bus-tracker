@@ -22,31 +22,7 @@ const buildMarkerHtml = (
   shortName: string,
   color: string,
   textColor: string,
-  heading: number | null
 ) => {
-  const arrow = Number.isFinite(heading)
-    ? `
-      <div style="
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        width: 0;
-        height: 0;
-        transform: translate(-50%, -50%) rotate(${heading}deg);
-      ">
-        <div style="
-          width: 0;
-          height: 0;
-          border-left: 6px solid transparent;
-          border-right: 6px solid transparent;
-          border-bottom: 10px solid ${textColor};
-          filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.5));
-          transform: translateY(-18px);
-        "></div>
-      </div>
-    `
-    : "";
-
   return `
   <div style="
     position: relative;
@@ -62,7 +38,7 @@ const buildMarkerHtml = (
     font-size: 12px;
     border: 2px solid #ffffff;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
-  ">${shortName}${arrow}</div>
+  ">${shortName}</div>
 `;
 };
 
@@ -121,10 +97,8 @@ export default function MapView({ positions, routes }: MapViewProps) {
     shortName: string,
     color: string,
     textColor: string,
-    heading: number | null
   ) => {
-    const headingBucket = Number.isFinite(heading) ? Math.round((heading ?? 0) / 10) * 10 : "none";
-    const cacheKey = `${shortName}-${color}-${textColor}-${headingBucket}`;
+    const cacheKey = `${shortName}-${color}-${textColor}`;
     const cached = iconCache.current.get(cacheKey);
     if (cached) {
       return cached;
@@ -132,7 +106,7 @@ export default function MapView({ positions, routes }: MapViewProps) {
 
     const icon = L.divIcon({
       className: "route-marker",
-      html: buildMarkerHtml(shortName, color, textColor, heading),
+      html: buildMarkerHtml(shortName, color, textColor),
       iconSize: [32, 32],
       iconAnchor: [16, 16],
     });
@@ -245,8 +219,7 @@ export default function MapView({ positions, routes }: MapViewProps) {
         const shortName = position.routeShortName ?? route?.shortName ?? "?";
         const color = position.routeColor ?? route?.color ?? "#1976d2";
         const textColor = route?.textColor ?? "#ffffff";
-        const heading = Number.isFinite(position.heading) ? (position.heading ?? null) : null;
-        const icon = getMarkerIcon(shortName, color, textColor, heading);
+        const icon = getMarkerIcon(shortName, color, textColor);
 
         return (
           <Marker
