@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { MapContainer, Marker, Polyline, Popup, TileLayer } from "react-leaflet";
+import { renderToString } from "react-dom/server";
 import L from "leaflet";
 import type { Route, VehiclePosition } from "../api/types";
 import { useVehicleArrivals } from "../hooks/useVehicleArrivals";
@@ -18,57 +19,54 @@ const buildRouteIndex = (routes: Route[]) => {
   return map;
 };
 
+// Route marker component
+const RouteMarker = ({
+  shortName,
+  color,
+  textColor,
+}: {
+  shortName: string;
+  color: string;
+  textColor: string;
+}) => (
+  <div
+    className="w-8 h-8 flex items-center justify-center rounded-full border-2 border-white font-bold text-xs shadow-md"
+    style={{
+      backgroundColor: color,
+      color: textColor,
+    }}
+  >
+    {shortName}
+  </div>
+);
+
+// Stop marker component
+const StopMarker = ({ label }: { label: string }) => (
+  <div className="flex items-center gap-1.5" style={{ transform: "translate(-6px, -6px)" }}>
+    <div
+      className="w-3 h-3 rounded-full border-2 border-blue-600 bg-white shadow-sm"
+    />
+    <div
+      className="whitespace-nowrap rounded-md bg-white text-gray-900 text-xs font-semibold px-1.5 py-0.5 shadow-sm"
+    >
+      {label}
+    </div>
+  </div>
+);
+
 const buildMarkerHtml = (
   shortName: string,
   color: string,
   textColor: string,
 ) => {
-  return `
-  <div style="
-    position: relative;
-    background: ${color};
-    color: ${textColor};
-    border-radius: 999px;
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    font-size: 12px;
-    border: 2px solid #ffffff;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
-  ">${shortName}</div>
-`;
+  return renderToString(
+    <RouteMarker shortName={shortName} color={color} textColor={textColor} />
+  );
 };
 
-const buildStopMarkerHtml = (label: string) => `
-  <div style="
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    transform: translate(-6px, -6px);
-  ">
-    <div style="
-      width: 12px;
-      height: 12px;
-      border-radius: 999px;
-      background: #ffffff;
-      border: 2px solid #1976d2;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
-    "></div>
-    <div style="
-      background: #ffffff;
-      color: #111827;
-      border-radius: 10px;
-      padding: 2px 6px;
-      font-size: 12px;
-      font-weight: 600;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
-      white-space: nowrap;
-    ">${label}</div>
-  </div>
-`;
+const buildStopMarkerHtml = (label: string) => {
+  return renderToString(<StopMarker label={label} />);
+};
 
 const formatMinutes = (minutes: number) => {
   if (minutes <= 0) {
