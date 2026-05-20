@@ -20,6 +20,9 @@ class Settings:
     GRT_TRIP_UPDATES_URL: Optional[str]
     GRT_ALERTS_URL: Optional[str]
     GRT_GTFS_STATIC_URL: str
+    LRT_VEHICLE_POSITIONS_URL: Optional[str]
+    LRT_TRIP_UPDATES_URL: Optional[str]
+    LRT_GTFS_STATIC_URL: Optional[str]
     REFRESH_SECONDS: int
     GRT_ALLOW_WEAK_TLS: bool
 
@@ -78,6 +81,9 @@ def load_settings() -> Settings:
         GRT_TRIP_UPDATES_URL=_get_optional_env("GRT_TRIP_UPDATES_URL"),
         GRT_ALERTS_URL=_get_optional_env("GRT_ALERTS_URL"),
         GRT_GTFS_STATIC_URL=_get_required_env("GRT_GTFS_STATIC_URL"),
+        LRT_VEHICLE_POSITIONS_URL=_get_optional_env("LRT_VEHICLE_POSITIONS_URL"),
+        LRT_TRIP_UPDATES_URL=_get_optional_env("LRT_TRIP_UPDATES_URL"),
+        LRT_GTFS_STATIC_URL=_get_optional_env("LRT_GTFS_STATIC_URL"),
         REFRESH_SECONDS=_get_int_env("REFRESH_SECONDS", DEFAULT_REFRESH_SECONDS),
         GRT_ALLOW_WEAK_TLS=_get_bool_env("GRT_ALLOW_WEAK_TLS", False),
     )

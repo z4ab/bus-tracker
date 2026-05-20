@@ -115,16 +115,33 @@ class Cache:
                 logger.exception("On-demand cache refresh failed")
 
     async def refresh_once(self) -> None:
-        """Refresh vehicle positions, trip updates, and static data."""
+        """Refresh vehicle positions, trip updates, and static data for GRT and LRT."""
         vehicles: List[Dict[str, Any]] = []
         routes: Dict[str, Dict[str, Any]] = {}
         stops: Dict[str, Dict[str, Any]] = {}
         trip_updates: Optional[List[Dict[str, Any]]] = None
 
-        vehicles = await gtfs_realtime.fetch_vehicle_positions(
+        # Fetch GRT (bus) data
+        grt_vehicles = await gtfs_realtime.fetch_vehicle_positions(
             self._settings.GRT_VEHICLE_POSITIONS_URL,
             allow_weak_tls=self._settings.GRT_ALLOW_WEAK_TLS,
         )
+        for vehicle in grt_vehicles:
+            vehicle["transport_type"] = "bus"
+        vehicles.extend(grt_vehicles)
+
+        # Fetch LRT data if configured
+        if self._settings.LRT_VEHICLE_POSITIONS_URL:
+            try:
+                lrt_vehicles = await gtfs_realtime.fetch_vehicle_positions(
+                    self._settings.LRT_VEHICLE_POSITIONS_URL,
+                    allow_weak_tls=self._settings.GRT_ALLOW_WEAK_TLS,
+                )
+                for vehicle in lrt_vehicles:
+                    vehicle["transport_type"] = "lrt"
+                vehicles.extend(lrt_vehicles)
+            except Exception:
+                logger.exception("Failed to fetch LRT vehicle positions")
 
         if self._settings.GRT_TRIP_UPDATES_URL:
             try:
@@ -132,8 +149,26 @@ class Cache:
                     self._settings.GRT_TRIP_UPDATES_URL,
                     allow_weak_tls=self._settings.GRT_ALLOW_WEAK_TLS,
                 )
+                for update in trip_updates:
+                    update["transport_type"] = "bus"
             except Exception:
                 logger.exception("Failed to fetch GTFS-realtime trip updates")
+
+        # Fetch LRT trip updates if configured
+        if self._settings.LRT_TRIP_UPDATES_URL:
+            try:
+                lrt_updates = await gtfs_realtime.fetch_trip_updates(
+                    self._settings.LRT_TRIP_UPDATES_URL,
+                    allow_weak_tls=self._settings.GRT_ALLOW_WEAK_TLS,
+                )
+                for update in lrt_updates:
+                    update["transport_type"] = "lrt"
+                if trip_updates:
+                    trip_updates.extend(lrt_updates)
+                else:
+                    trip_updates = lrt_updates
+            except Exception:
+                logger.exception("Failed to fetch LRT trip updates")
 
         # Static data changes infrequently; only fetch once per process.
         if not self._routes or not self._stops:
@@ -143,6 +178,20 @@ class Cache:
             )
             routes = bundle.get("routes", {})
             stops = bundle.get("stops", {})
+
+            # Fetch LRT static data if configured
+            if self._settings.LRT_GTFS_STATIC_URL:
+                try:
+                    lrt_bundle = await gtfs_static.fetch_static_bundle(
+                        self._settings.LRT_GTFS_STATIC_URL,
+                        allow_weak_tls=self._settings.GRT_ALLOW_WEAK_TLS,
+                    )
+                    lrt_routes = lrt_bundle.get("routes", {})
+                    lrt_stops = lrt_bundle.get("stops", {})
+                    routes.update(lrt_routes)
+                    stops.update(lrt_stops)
+                except Exception:
+                    logger.exception("Failed to fetch LRT static data")
 
         now = datetime.now(timezone.utc)
         timestamp = now.isoformat()
