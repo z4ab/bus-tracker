@@ -11,6 +11,7 @@ type VehiclePositionApi = {
   bearing?: number | null;
   speed?: number | null;
   timestamp?: number | null;
+  transport_type?: string | null;
 };
 
 type VehiclePositionsResponse = {
@@ -28,6 +29,7 @@ const toVehiclePosition = (raw: VehiclePositionApi): VehiclePosition => ({
   routeId: raw.route_id ?? undefined,
   heading: raw.bearing ?? undefined,
   updatedAt: raw.timestamp ? new Date(raw.timestamp * 1000).toISOString() : undefined,
+  transportType: raw.transport_type === "lrt" ? "lrt" : "bus",
 });
 
 const toCacheStatus = (raw: VehiclePositionsResponse): CacheStatus => ({
