@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Optional
 
 from core.config import Settings, load_settings
 from services import gtfs_realtime, gtfs_static
+from services.departure_query import DepartureQuery
+from services.geo_query import GeoQuery
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +33,8 @@ class Cache:
         self._lock = asyncio.Lock()
         self._refresh_lock = asyncio.Lock()
         self._task: Optional[asyncio.Task] = None
+        self._geo = GeoQuery()
+        self._departure = DepartureQuery()
 
     def _compute_bearing(
         self,
@@ -299,38 +303,9 @@ class Cache:
     ) -> List[Dict[str, Any]]:
         """Return stops within *radius_m* of (lat, lon), sorted by distance."""
         await self.ensure_fresh()
-        RADIUS_EARTH_M = 6_371_000.0
-        lat_r = math.radians(lat)
-        lon_r = math.radians(lon)
-
-        scored: list[tuple[float, Dict[str, Any]]] = []
         async with self._lock:
-            for stop_id, info in self._stops.items():
-                s_lat = info.get("stop_lat")
-                s_lon = info.get("stop_lon")
-                if not (
-                    isinstance(s_lat, (int, float)) and isinstance(s_lon, (int, float))
-                ):
-                    continue
-                s_lat_r = math.radians(float(s_lat))
-                s_lon_r = math.radians(float(s_lon))
-                dlat = s_lat_r - lat_r
-                dlon = s_lon_r - lon_r
-                a = (
-                    math.sin(dlat / 2) ** 2
-                    + math.cos(lat_r) * math.cos(s_lat_r) * math.sin(dlon / 2) ** 2
-                )
-                dist = RADIUS_EARTH_M * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-                if dist <= radius_m:
-                    scored.append(
-                        (
-                            dist,
-                            {**info, "stop_id": stop_id, "distance_m": round(dist, 1)},
-                        )
-                    )
-
-        scored.sort(key=lambda t: t[0])
-        return [item for _, item in scored[:limit]]
+            stops_snapshot = {sid: dict(info) for sid, info in self._stops.items()}
+        return self._geo.nearby_stops(stops_snapshot, lat, lon, radius_m, limit)
 
     async def get_trip_updates(self) -> List[Dict[str, Any]]:
         """Return a snapshot of the latest trip updates."""
@@ -347,28 +322,11 @@ class Cache:
         """
         await self.ensure_fresh()
         async with self._lock:
-            update = next(
-                (item for item in self._trip_updates if item.get("trip_id") == trip_id),
-                None,
-            )
-            if update is None:
-                return None
-
-            stops_index = self._stops
-            enriched_stops = []
-            for stop_update in update.get("stop_time_updates", []):
-                stop_id = stop_update.get("stop_id")
-                entry = dict(stop_update)
-                if stop_id:
-                    info = stops_index.get(stop_id, {})
-                    entry["stop_name"] = info.get("stop_name")
-                    entry["stop_lat"] = info.get("stop_lat")
-                    entry["stop_lon"] = info.get("stop_lon")
-                enriched_stops.append(entry)
-
-            result = dict(update)
-            result["stop_time_updates"] = enriched_stops
-            return result
+            trip_updates_snapshot = [dict(u) for u in self._trip_updates]
+            stops_snapshot = {sid: dict(info) for sid, info in self._stops.items()}
+        return self._departure.get_trip_details(
+            trip_updates_snapshot, stops_snapshot, trip_id
+        )
 
     async def get_last_updated(self) -> Optional[str]:
         """Return the last refresh timestamp in ISO 8601 format."""

@@ -3,6 +3,8 @@ from fastapi.testclient import TestClient
 
 import api.routes as routes_module
 
+APP_VERSION = "0.1.0"
+
 
 class FakeCache:
     def __init__(self) -> None:
@@ -124,6 +126,7 @@ def test_health(monkeypatch) -> None:
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
+    assert data["version"] == APP_VERSION
     assert data["last_updated"] == fake._last_updated
     assert data["cache"] == {
         "vehicles": 1,
@@ -147,7 +150,18 @@ def test_list_vehicles(monkeypatch) -> None:
 
     assert response.status_code == 200
     data = response.json()
-    assert data["vehicles"] == fake._vehicles
+    # The response model adds explicit None for optional fields.
+    assert len(data["vehicles"]) == 1
+    vehicle = data["vehicles"][0]
+    assert vehicle["vehicle_id"] == "veh-1"
+    assert vehicle["trip_id"] == "trip-1"
+    assert vehicle["route_id"] == "route-1"
+    assert vehicle["latitude"] == 43.0
+    assert vehicle["longitude"] == -80.0
+    assert vehicle["bearing"] == 90.0
+    assert vehicle["speed"] == 10.0
+    assert vehicle["timestamp"] == 1710000000
+    assert vehicle["transport_type"] is None
     assert data["stale"] is False
     assert data["last_refresh_age_seconds"] is None
     assert data["last_updated"] == "2025-03-09T12:00:00Z"
@@ -180,7 +194,15 @@ def test_list_routes(monkeypatch) -> None:
     response = client.get("/api/routes")
 
     assert response.status_code == 200
-    assert response.json() == {"routes": list(fake._routes.values())}
+    data = response.json()
+    # The response model adds explicit None for optional fields.
+    assert len(data["routes"]) == 1
+    route = data["routes"][0]
+    assert route["route_id"] == "route-1"
+    assert route["route_short_name"] == "1"
+    assert route["route_long_name"] is None
+    assert route["route_color"] == "#123456"
+    assert route["route_text_color"] is None
 
 
 def test_get_vehicle_arrivals(monkeypatch) -> None:
