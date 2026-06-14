@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { Marker, Popup } from "react-leaflet";
+import { Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import type { VehicleArrivalStop } from "../api/types";
 import { buildStopMarkerHtml } from "./StopMarker";
@@ -20,6 +20,7 @@ interface TripStopMarkerProps {
 
 export default function TripStopMarker({ stop }: TripStopMarkerProps) {
   const iconCache = useRef(new Map<string, L.DivIcon>());
+  const map = useMap();
 
   const getStopIcon = (label: string) => {
     const cached = iconCache.current.get(label);
@@ -52,7 +53,16 @@ export default function TripStopMarker({ stop }: TripStopMarkerProps) {
   const icon = getStopIcon(label);
 
   return (
-    <Marker position={[stop.stopLat, stop.stopLon]} icon={icon} zIndexOffset={300}>
+    <Marker
+      position={[stop.stopLat, stop.stopLon]}
+      icon={icon}
+      zIndexOffset={300}
+      eventHandlers={{
+        click: () => {
+          map.flyTo([stop.stopLat, stop.stopLon], 14, { duration: 1 });
+        },
+      }}
+    >
       <Popup>
         <div className="text-sm">
           <div className="font-semibold text-gray-900">
