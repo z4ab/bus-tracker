@@ -180,9 +180,10 @@ class Cache:
                 logger.exception("Failed to fetch LRT trip updates")
                 any_failure = True
 
-        # Static data changes infrequently; only fetch once per process.
+        # Static data changes infrequently; prefer SQLite cache and only
+        # re-fetch when the feed's Last-Modified / ETag changes.
         if not self._routes or not self._stops:
-            bundle = await gtfs_static.fetch_static_bundle(
+            bundle = await gtfs_static.fetch_static_bundle_cached(
                 self._settings.GRT_GTFS_STATIC_URL,
                 allow_weak_tls=self._settings.GRT_ALLOW_WEAK_TLS,
             )
@@ -192,7 +193,7 @@ class Cache:
             # Fetch LRT static data if configured
             if self._settings.LRT_GTFS_STATIC_URL:
                 try:
-                    lrt_bundle = await gtfs_static.fetch_static_bundle(
+                    lrt_bundle = await gtfs_static.fetch_static_bundle_cached(
                         self._settings.LRT_GTFS_STATIC_URL,
                         allow_weak_tls=self._settings.GRT_ALLOW_WEAK_TLS,
                     )

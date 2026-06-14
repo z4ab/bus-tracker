@@ -6,6 +6,9 @@ import logging
 import zipfile
 from typing import Any, Dict, List, Optional
 
+import httpx
+
+from services.gtfs_db import load_cached_static, save_cached_static
 from services.http_client import create_async_client
 
 logger = logging.getLogger(__name__)
@@ -205,3 +208,93 @@ async def fetch_static_stops(
         url, timeout_s=timeout_s, allow_weak_tls=allow_weak_tls
     )
     return bundle["stops"]
+
+
+async def _head_for_headers(
+    url: str,
+    timeout_s: float = 20.0,
+    allow_weak_tls: bool = False,
+) -> Dict[str, str]:
+    """Send a HEAD request and return selected response headers.
+
+    Returns ``{"last_modified": …, "etag": …}``.  Missing or failed headers
+    are returned as ``None``.  If the HEAD request itself fails (network
+    error, non-2xx status) an empty dict is returned so the caller falls
+    through to a full GET.
+    """
+    try:
+        async with create_async_client(timeout_s, allow_weak_tls) as client:
+            response = await client.head(url, follow_redirects=True)
+            if response.is_error:
+                return {}
+            return {
+                "last_modified": response.headers.get("last-modified"),
+                "etag": response.headers.get("etag"),
+            }
+    except (httpx.HTTPError, OSError):
+        logger.debug("HEAD request failed for %s — will fall through to GET", url)
+        return {}
+
+
+async def fetch_static_bundle_cached(
+    url: str,
+    timeout_s: float = 20.0,
+    allow_weak_tls: bool = False,
+    db_path: Optional[str] = None,
+) -> Dict[str, Dict[str, Any]]:
+    """Fetch GTFS static data, preferring SQLite cache when the feed hasn't changed.
+
+    1. Send a lightweight HEAD request to capture ``Last-Modified`` / ``ETag``.
+    2. If the SQLite cache has data for *url* whose ``last_modified`` or
+       ``etag`` matches the server's, return the cached copy without any
+       network download.
+    3. Otherwise fetch the full zip, parse it, persist to SQLite, and return.
+
+    Returns ``{"routes": …, "stops": …}``.  On cache write failure the
+    parsed data is still returned (the network fetch succeeded); the user
+    just loses persistence until the next call.
+    """
+    if not url:
+        raise ValueError("GTFS static URL is required")
+
+    # 1. Lightweight HEAD to check for changes.
+    server_headers = await _head_for_headers(url, timeout_s, allow_weak_tls)
+    server_lm = server_headers.get("last_modified")
+    server_etag = server_headers.get("etag")
+
+    # 2. Try SQLite cache.
+    cached = await load_cached_static(url, db_path=db_path)
+    if cached is not None:
+        cached_lm = cached.get("last_modified")
+        cached_etag = cached.get("etag")
+        # If the server didn't give us headers, skip the cache (safety).
+        if server_lm or server_etag:
+            if server_lm and server_lm == cached_lm:
+                logger.debug("Cache HIT for %s (Last-Modified unchanged)", url)
+                return {"routes": cached["routes"], "stops": cached["stops"]}
+            if server_etag and server_etag == cached_etag:
+                logger.debug("Cache HIT for %s (ETag unchanged)", url)
+                return {"routes": cached["routes"], "stops": cached["stops"]}
+
+    # 3. Cache miss or changed — fetch full bundle.
+    logger.info("Fetching GTFS static feed from %s", url)
+    async with create_async_client(timeout_s, allow_weak_tls) as client:
+        response = await client.get(url)
+        response.raise_for_status()
+    bundle = parse_gtfs_static_bundle(response.content)
+
+    # 4. Persist to SQLite (best-effort).
+    ok = await save_cached_static(
+        url,
+        bundle["routes"],
+        bundle["stops"],
+        last_modified=server_lm,
+        etag=server_etag,
+        db_path=db_path,
+    )
+    if ok:
+        logger.debug("Cached static data for %s", url)
+    else:
+        logger.warning("Failed to write static data cache for %s", url)
+
+    return bundle
