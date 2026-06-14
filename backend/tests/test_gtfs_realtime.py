@@ -1,3 +1,4 @@
+import pytest
 from google.transit import gtfs_realtime_pb2
 
 from services.gtfs_realtime import parse_vehicle_positions
