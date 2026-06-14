@@ -46,6 +46,16 @@ async def list_routes() -> Dict[str, List[Dict[str, Any]]]:
     return {"routes": list(routes.values())}
 
 
+@router.get("/api/stops/nearby")
+async def nearby_stops(
+    lat: float, lon: float, radius: float = 500.0, limit: int = 20
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Return stops within *radius* metres of (lat, lon), sorted by distance."""
+    cache = get_cache()
+    stops = await cache.get_nearby_stops(lat, lon, radius, limit)
+    return {"stops": stops}
+
+
 @router.get("/api/vehicles/{vehicle_id}/arrivals")
 async def get_vehicle_arrivals(vehicle_id: str) -> Dict[str, Any]:
     """Return upcoming stop times for the vehicle's active trip."""

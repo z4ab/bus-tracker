@@ -262,6 +262,37 @@ class Cache:
         async with self._lock:
             return {stop_id: dict(info) for stop_id, info in self._stops.items()}
 
+    async def get_nearby_stops(
+        self, lat: float, lon: float, radius_m: float = 500.0, limit: int = 20
+    ) -> List[Dict[str, Any]]:
+        """Return stops within *radius_m* of (lat, lon), sorted by distance."""
+        await self.ensure_fresh()
+        RADIUS_EARTH_M = 6_371_000.0
+        lat_r = math.radians(lat)
+        lon_r = math.radians(lon)
+
+        scored: list[tuple[float, Dict[str, Any]]] = []
+        async with self._lock:
+            for stop_id, info in self._stops.items():
+                s_lat = info.get("stop_lat")
+                s_lon = info.get("stop_lon")
+                if not (isinstance(s_lat, (int, float)) and isinstance(s_lon, (int, float))):
+                    continue
+                s_lat_r = math.radians(float(s_lat))
+                s_lon_r = math.radians(float(s_lon))
+                dlat = s_lat_r - lat_r
+                dlon = s_lon_r - lon_r
+                a = (
+                    math.sin(dlat / 2) ** 2
+                    + math.cos(lat_r) * math.cos(s_lat_r) * math.sin(dlon / 2) ** 2
+                )
+                dist = RADIUS_EARTH_M * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+                if dist <= radius_m:
+                    scored.append((dist, {**info, "stop_id": stop_id, "distance_m": round(dist, 1)}))
+
+        scored.sort(key=lambda t: t[0])
+        return [item for _, item in scored[:limit]]
+
     async def get_trip_updates(self) -> List[Dict[str, Any]]:
         """Return a snapshot of the latest trip updates."""
         await self.ensure_fresh()
