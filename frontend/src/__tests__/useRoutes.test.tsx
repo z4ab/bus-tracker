@@ -6,7 +6,7 @@ import type { Route } from "../api/types";
 
 // ── Mock apiGet ─────────────────────────────────────────────────────────────
 
-const mockApiGet = vi.fn<() => Promise<unknown>>();
+const mockApiGet = vi.fn<(path: string) => Promise<unknown>>();
 
 vi.mock("../api/client", () => ({
   apiGet: (path: string) => mockApiGet(path),

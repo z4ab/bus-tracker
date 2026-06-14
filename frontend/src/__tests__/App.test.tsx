@@ -120,7 +120,7 @@ describe("App", () => {
   });
 
   it("shows loading spinner when queries are loading", () => {
-    mockUseRoutes.mockReturnValue({ data: undefined, isLoading: true, error: null });
+    mockUseRoutes.mockReturnValue({ data: [], isLoading: true, error: null });
     mockUseVehiclePositions.mockReturnValue({
       data: undefined,
       isLoading: true,
