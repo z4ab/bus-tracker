@@ -173,10 +173,11 @@ export default function MapView({ positions, routes }: MapViewProps) {
         />
       </MapContainer>
 
-      {/* Nearby stops overlay (debug / info) */}
-      {nearbyStopsQuery.data && nearbyStopsQuery.data.length > 0 && (
-        <NearbyStopsPanel stops={nearbyStopsQuery.data} />
-      )}
+      {/* Nearby stops overlay */}
+      <NearbyStopsPanel
+        stops={nearbyStopsQuery.data ?? []}
+        isLoading={nearbyStopsQuery.isLoading}
+      />
     </div>
   );
 }
