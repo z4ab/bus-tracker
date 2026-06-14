@@ -70,14 +70,28 @@ export default function MapView({ positions, routes }: MapViewProps) {
     }
   }, [userLocation]);
 
-  const handleVehicleSelect = useCallback((vehicleId: string, routeId: string | undefined) => {
-    if (routeId) {
-      setSelectedRouteId(routeId);
-    }
-    setSelectedVehicleId(vehicleId);
-    // Clear stop selection when selecting a vehicle
-    setSelectedStopId(null);
-  }, []);
+  const handleVehicleSelect = useCallback(
+    (vehicleId: string, routeId: string | undefined) => {
+      if (routeId) {
+        setSelectedRouteId(routeId);
+      }
+      setSelectedVehicleId(vehicleId);
+      // Clear stop selection when selecting a vehicle
+      setSelectedStopId(null);
+
+      // Fly to the selected vehicle
+      const vehicle = positions.find((p) => p.id === vehicleId);
+      if (
+        vehicle &&
+        mapRef.current &&
+        Number.isFinite(vehicle.lat) &&
+        Number.isFinite(vehicle.lon)
+      ) {
+        mapRef.current.flyTo([vehicle.lat, vehicle.lon], 14, { duration: 1 });
+      }
+    },
+    [positions]
+  );
 
   const handleSelectStop = useCallback((stopId: string) => {
     setSelectedStopId((prev) => (prev === stopId ? null : stopId));
@@ -256,15 +270,14 @@ export default function MapView({ positions, routes }: MapViewProps) {
       </MapContainer>
 
       {/* Nearby stops overlay */}
-      {nearbyStops.length > 0 && (
-        <NearbyStopsPanel
-          stops={nearbyStops}
-          focusedIndex={focusedStopIndex}
-          selectedStopId={selectedStopId}
-          onSelectStop={handleSelectStop}
-          onFocusChange={setFocusedStopIndex}
-        />
-      )}
+      <NearbyStopsPanel
+        stops={nearbyStopsQuery.data ?? []}
+        isLoading={nearbyStopsQuery.isLoading}
+        focusedIndex={focusedStopIndex}
+        selectedStopId={selectedStopId}
+        onSelectStop={handleSelectStop}
+        onFocusChange={setFocusedStopIndex}
+      />
     </div>
   );
 }
