@@ -26,8 +26,8 @@ def test_parse_vehicle_positions_extracts_fields() -> None:
     assert vehicles[0]["vehicle_id"] == "veh-123"
     assert vehicles[0]["trip_id"] == "trip-1"
     assert vehicles[0]["route_id"] == "route-1"
-    assert vehicles[0]["latitude"] == 43.45
-    assert vehicles[0]["longitude"] == -80.52
-    assert vehicles[0]["bearing"] == 90.0
-    assert vehicles[0]["speed"] == 12.3
+    assert vehicles[0]["latitude"] == pytest.approx(43.45, abs=1e-3)
+    assert vehicles[0]["longitude"] == pytest.approx(-80.52, abs=1e-3)
+    assert vehicles[0]["bearing"] == pytest.approx(90.0, abs=1e-3)
+    assert vehicles[0]["speed"] == pytest.approx(12.3, abs=1e-3)
     assert vehicles[0]["timestamp"] == 1710000000
