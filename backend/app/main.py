@@ -1,6 +1,10 @@
 """FastAPI application entrypoint for the Bus Tracker backend.
 
-Configures logging, CORS for the local Vite dev server, and starts the refresh cache.
+Configures logging, CORS origins, and starts the refresh cache.
+CORS origins are read from the CORS_ALLOWED_ORIGINS environment variable
+(comma-separated list), falling back to localhost dev origins. The
+FRONTEND_ORIGIN environment variable is also supported for backward
+compatibility.
 """
 
 import logging
@@ -19,13 +23,17 @@ logging.basicConfig(
 
 app = FastAPI(title="Bus Tracker API")
 
-# Allow local Vite dev server origins during development, the existing Vercel
-# deployment, and the Railway production frontend (read from FRONTEND_ORIGIN).
-cors_origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "https://bus-tracker-murex-psi.vercel.app",
-]
+# Read allowed origins from CORS_ALLOWED_ORIGINS (comma-separated list).
+# Fall back to local Vite dev server origins during development.
+# FRONTEND_ORIGIN is also supported for backward compatibility.
+cors_env = os.environ.get("CORS_ALLOWED_ORIGINS", "").strip()
+if cors_env:
+    cors_origins = [origin.strip() for origin in cors_env.split(",") if origin.strip()]
+else:
+    cors_origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
 
 frontend_origin = os.environ.get("FRONTEND_ORIGIN", "").strip()
 if frontend_origin and frontend_origin not in cors_origins:
