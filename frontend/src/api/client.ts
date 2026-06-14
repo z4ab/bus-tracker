@@ -16,9 +16,10 @@ const buildApiUrl = (path: string) => {
   return joinUrl(API_BASE_URL, path);
 };
 
-export async function apiGet<T>(path: string): Promise<T> {
+async function apiRequest<T>(path: string, method: string): Promise<T> {
   const url = buildApiUrl(path);
   const response = await fetch(url, {
+    method,
     headers: {
       Accept: "application/json",
     },
@@ -30,4 +31,12 @@ export async function apiGet<T>(path: string): Promise<T> {
   }
 
   return (await response.json()) as T;
+}
+
+export async function apiGet<T>(path: string): Promise<T> {
+  return apiRequest<T>(path, "GET");
+}
+
+export async function apiPost<T>(path: string): Promise<T> {
+  return apiRequest<T>(path, "POST");
 }

@@ -1,3 +1,6 @@
+import { useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { apiPost } from "./api/client";
 import MapView from "./components/MapView";
 import { useRoutes } from "./hooks/useRoutes";
 import { useVehiclePositions } from "./hooks/useVehiclePositions";
@@ -18,8 +21,18 @@ const formatAge = (seconds: number | null): string | null => {
 };
 
 export default function App() {
+  const queryClient = useQueryClient();
   const routesQuery = useRoutes();
   const positionsQuery = useVehiclePositions();
+
+  const handleRefresh = useCallback(async () => {
+    try {
+      await apiPost("/api/refresh");
+      await queryClient.invalidateQueries();
+    } catch {
+      // Error will surface via the existing stale/error banner on next refetch
+    }
+  }, [queryClient]);
 
   const routes = routesQuery.data ?? [];
   const positions = positionsQuery.data?.positions ?? [];
@@ -36,6 +49,22 @@ export default function App() {
     <div className="flex h-screen">
       {/* Main Content */}
       <div className="flex-1 relative min-w-0">
+        {/* Refresh button */}
+        <button
+          onClick={handleRefresh}
+          className="absolute top-3 right-3 z-20 p-2 rounded-full bg-white/80 hover:bg-white shadow hover:shadow-md transition-all duration-200 text-gray-600 hover:text-blue-600"
+          title="Refresh data now"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
+          </svg>
+        </button>
+
         {error && (
           <div className="absolute top-0 left-0 right-0 p-4 bg-red-50 border-l-4 border-red-400 z-10">
             <p className="text-red-700 text-sm">{getErrorMessage(error)}</p>

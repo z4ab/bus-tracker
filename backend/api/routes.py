@@ -7,7 +7,7 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException
 
-from services.cache import get_cache
+from services.cache import Cache, get_cache
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +27,15 @@ async def health() -> Dict[str, Any]:
         "cache": cache_sizes,
         "feeds": feed_health,
     }
+
+
+@router.post("/api/refresh")
+async def refresh_cache() -> Dict[str, str]:
+    """Force an immediate refresh of the GTFS cache."""
+    cache: Cache = get_cache()
+    await cache.refresh_once()
+    logger.info("Manual cache refresh triggered via /api/refresh")
+    return {"status": "ok"}
 
 
 @router.get("/api/vehicles")
