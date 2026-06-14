@@ -11,15 +11,36 @@ const RouteMarker = ({
   color,
   textColor,
   transportType,
+  heading,
 }: {
   shortName: string;
   color: string;
   textColor: string;
   transportType?: "bus" | "lrt";
+  heading?: number;
 }) => {
   const isLrt = transportType === "lrt";
   return (
     <div className="relative">
+      {heading !== undefined && heading !== null && (
+        <div
+          className="absolute left-1/2 -top-3 z-10 w-0 h-0"
+          style={{
+            marginLeft: "-5px",
+            transform: `rotate(${heading}deg)`,
+          }}
+        >
+          <div
+            style={{
+              width: 0,
+              height: 0,
+              borderLeft: "5px solid transparent",
+              borderRight: "5px solid transparent",
+              borderBottom: "8px solid " + color,
+            }}
+          />
+        </div>
+      )}
       <div
         className={`w-8 h-8 flex items-center justify-center rounded-full border-2 font-bold text-xs shadow-md ${
           isLrt ? "border-amber-400" : "border-white"
@@ -44,7 +65,8 @@ const buildMarkerHtml = (
   shortName: string,
   color: string,
   textColor: string,
-  transportType?: "bus" | "lrt"
+  transportType?: "bus" | "lrt",
+  heading?: number
 ) => {
   return renderToString(
     <RouteMarker
@@ -52,6 +74,7 @@ const buildMarkerHtml = (
       color={color}
       textColor={textColor}
       transportType={transportType}
+      heading={heading}
     />
   );
 };
@@ -70,9 +93,10 @@ export default function VehicleMarker({ position, routeIndex, onSelect }: Vehicl
   const color = position.routeColor ?? route?.color ?? "#1976d2";
   const textColor = route?.textColor ?? "#ffffff";
   const transportType = position.transportType;
+  const heading = position.heading;
 
   const getMarkerIcon = () => {
-    const cacheKey = `${shortName}-${color}-${textColor}-${transportType ?? ""}`;
+    const cacheKey = `${shortName}-${color}-${textColor}-${transportType ?? ""}-${heading ?? ""}`;
     const cached = iconCache.current.get(cacheKey);
     if (cached) {
       // Promote to most recently used
@@ -83,7 +107,7 @@ export default function VehicleMarker({ position, routeIndex, onSelect }: Vehicl
 
     const icon = L.divIcon({
       className: "route-marker",
-      html: buildMarkerHtml(shortName, color, textColor, transportType),
+      html: buildMarkerHtml(shortName, color, textColor, transportType, heading),
       iconSize: [32, 32],
       iconAnchor: [16, 16],
     });
