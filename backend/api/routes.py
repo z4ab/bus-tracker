@@ -1,11 +1,12 @@
-"""API routes for vehicles, routes, and health checks."""
+"""
+API routes for vehicles, routes, and health checks.
+"""
 
 import logging
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException
 
-from core.config import load_settings
 from services.cache import get_cache
 
 logger = logging.getLogger(__name__)
@@ -59,13 +60,6 @@ async def nearby_stops(
 @router.get("/api/vehicles/{vehicle_id}/arrivals")
 async def get_vehicle_arrivals(vehicle_id: str) -> Dict[str, Any]:
     """Return upcoming stop times for the vehicle's active trip."""
-    settings = load_settings()
-    if not settings.GRT_TRIP_UPDATES_URL:
-        raise HTTPException(
-            status_code=503,
-            detail="Trip updates feed is not configured",
-        )
-
     cache = get_cache()
     vehicle = await cache.get_vehicle(vehicle_id)
     if not vehicle:
@@ -76,13 +70,10 @@ async def get_vehicle_arrivals(vehicle_id: str) -> Dict[str, Any]:
     if not trip_id:
         raise HTTPException(status_code=404, detail="Trip not found for vehicle")
 
-    trip_updates = await cache.get_trip_updates()
-    update = next(
-        (item for item in trip_updates if item.get("trip_id") == trip_id), None
-    )
     updated_at = await cache.get_last_updated()
+    details = await cache.get_trip_details(trip_id)
 
-    if not update:
+    if not details:
         return {
             "vehicle_id": vehicle_id,
             "trip_id": trip_id,
@@ -91,32 +82,11 @@ async def get_vehicle_arrivals(vehicle_id: str) -> Dict[str, Any]:
             "stops": [],
         }
 
-    stops_index = await cache.get_stops()
-    stops = []
-    for stop_update in update.get("stop_time_updates", []):
-        stop_id = stop_update.get("stop_id")
-        stop_name = None
-        stop_lat = None
-        stop_lon = None
-        if stop_id:
-            stop_info = stops_index.get(stop_id, {})
-            stop_name = stop_info.get("stop_name")
-            stop_lat = stop_info.get("stop_lat")
-            stop_lon = stop_info.get("stop_lon")
-        stops.append(
-            {
-                **stop_update,
-                "stop_name": stop_name,
-                "stop_lat": stop_lat,
-                "stop_lon": stop_lon,
-            }
-        )
-
     return {
         "vehicle_id": vehicle_id,
         "trip_id": trip_id,
-        "route_id": update.get("route_id") or vehicle.get("route_id"),
-        "feed_timestamp": update.get("timestamp"),
+        "route_id": details.get("route_id") or vehicle.get("route_id"),
+        "feed_timestamp": details.get("timestamp"),
         "updated_at": updated_at,
-        "stops": stops,
+        "stops": details.get("stop_time_updates", []),
     }
