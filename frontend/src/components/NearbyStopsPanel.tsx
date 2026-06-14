@@ -57,7 +57,9 @@ export default function NearbyStopsPanel({
             return (
               <div
                 key={stop.stopId}
-                ref={(el) => { itemRefs.current[index] = el; }}
+                ref={(el) => {
+                  itemRefs.current[index] = el;
+                }}
                 role="button"
                 tabIndex={isFocused ? 0 : -1}
                 aria-selected={isSelected}
