@@ -41,6 +41,9 @@ const fetchNearbyStops = async (lat: number, lon: number, radius: number) => {
  * staleTime of 60s means panning within the same stale window reuses cached data
  * instead of refetching. keepPreviousData prevents layout flicker when a new
  * query does fire after the stale window expires.
+ *
+ * Combined with the 1s debounce on the moveend callback in MapBindings.tsx,
+ * this ensures rapid panning does not flood the API with nearby-stop requests.
  */
 export const useNearbyStops = (center: [number, number] | null, radius = 500) =>
   useQuery({
