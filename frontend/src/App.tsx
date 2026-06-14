@@ -1,17 +1,10 @@
-import { useMemo, useState } from "react";
 import MapView from "./components/MapView";
 import { useRoutes } from "./hooks/useRoutes";
 import { useVehiclePositions } from "./hooks/useVehiclePositions";
-import type { CacheStatus, Route } from "./api/types";
+import type { CacheStatus } from "./api/types";
 
 const getErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "Something went wrong.";
-
-const buildRouteIndex = (routes: Route[] | undefined) => {
-  const map = new Map<string, Route>();
-  routes?.forEach((route) => map.set(route.id, route));
-  return map;
-};
 
 const formatAge = (seconds: number | null): string | null => {
   if (seconds === null) return null;
@@ -31,24 +24,6 @@ export default function App() {
   const routes = routesQuery.data ?? [];
   const positions = positionsQuery.data?.positions ?? [];
   const cacheStatus: CacheStatus | undefined = positionsQuery.data?.cacheStatus;
-
-  const routeIndex = useMemo(() => buildRouteIndex(routes), [routes]);
-
-  const routeSummaries = useMemo(() => {
-    const counts = new Map<string, { id: string; shortName: string; count: number }>();
-    positions.forEach((position) => {
-      const route = position.routeId ? routeIndex.get(position.routeId) : undefined;
-      const id = route?.id ?? position.routeId ?? "unknown";
-      const shortName = position.routeShortName ?? route?.shortName ?? "Unknown";
-      const existing = counts.get(id);
-      if (existing) {
-        existing.count += 1;
-      } else {
-        counts.set(id, { id, shortName, count: 1 });
-      }
-    });
-    return Array.from(counts.values()).sort((a, b) => a.shortName.localeCompare(b.shortName));
-  }, [positions, routeIndex]);
 
   const loading = routesQuery.isLoading || positionsQuery.isLoading;
   const error = routesQuery.error ?? positionsQuery.error;
@@ -70,8 +45,18 @@ export default function App() {
           <div className="absolute top-0 left-0 right-0 z-10">
             <div className="bg-amber-50 border-l-4 border-amber-400 p-3 mx-4 mt-4 rounded shadow">
               <p className="text-amber-800 text-sm flex items-center gap-2">
-                <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                <svg
+                  className="w-4 h-4 shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
+                  />
                 </svg>
                 <span>
                   Data may be stale —
@@ -95,8 +80,18 @@ export default function App() {
               <div className="absolute top-0 left-0 right-0 z-10">
                 <div className="bg-blue-50 border-l-4 border-blue-400 p-3 mx-4 mt-4 rounded shadow">
                   <p className="text-blue-800 text-sm flex items-center gap-2">
-                    <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    <svg
+                      className="w-4 h-4 shrink-0"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
                     </svg>
                     <span>No buses currently running on the tracked routes.</span>
                   </p>

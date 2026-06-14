@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef } from "react";
 import { useMap } from "react-leaflet";
 import L, { Control } from "leaflet";
 
@@ -68,7 +68,7 @@ class LocateControl extends Control {
 
 // ── Debounce utility ────────────────────────────────────────────────────────
 
-function debounce<T extends (...args: any[]) => void>(
+function debounce<T extends (...args: never[]) => void>(
   fn: T,
   delay: number
 ): (...args: Parameters<T>) => void {

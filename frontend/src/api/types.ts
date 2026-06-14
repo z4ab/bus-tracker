@@ -22,7 +22,7 @@ export interface VehiclePosition {
   routeColor?: string;
   updatedAt?: string;
   heading?: number;
-  transportType?: 'bus' | 'lrt';
+  transportType?: "bus" | "lrt";
 }
 
 export interface VehicleArrivalStop {

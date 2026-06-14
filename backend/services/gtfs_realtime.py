@@ -140,9 +140,9 @@ def parse_trip_updates(
                 "trip_id": trip.trip_id,
                 "route_id": route_id,
                 "vehicle_id": vehicle_id,
-                "timestamp": trip_update.timestamp
-                if trip_update.HasField("timestamp")
-                else None,
+                "timestamp": (
+                    trip_update.timestamp if trip_update.HasField("timestamp") else None
+                ),
                 "stop_time_updates": stop_time_updates,
             }
         )

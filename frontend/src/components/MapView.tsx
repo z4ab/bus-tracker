@@ -27,12 +27,8 @@ const buildRouteIndex = (routes: Route[]) => {
 export default function MapView({ positions, routes }: MapViewProps) {
   const routeIndex = useMemo(() => buildRouteIndex(routes), [routes]);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
-  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(
-    null
-  );
-  const [userLocation, setUserLocation] = useState<[number, number] | null>(
-    null
-  );
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const arrivalsQuery = useVehicleArrivals(selectedVehicleId);
@@ -44,16 +40,10 @@ export default function MapView({ positions, routes }: MapViewProps) {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          setUserLocation([
-            position.coords.latitude,
-            position.coords.longitude,
-          ]);
+          setUserLocation([position.coords.latitude, position.coords.longitude]);
           // Default center to user location on first load
           if (!mapCenter) {
-            setMapCenter([
-              position.coords.latitude,
-              position.coords.longitude,
-            ]);
+            setMapCenter([position.coords.latitude, position.coords.longitude]);
           }
         },
         () => {
@@ -78,31 +68,23 @@ export default function MapView({ positions, routes }: MapViewProps) {
     }
   }, [userLocation]);
 
-  const handleVehicleSelect = useCallback(
-    (vehicleId: string, routeId: string | undefined) => {
-      if (routeId) {
-        setSelectedRouteId(routeId);
-      }
-      setSelectedVehicleId(vehicleId);
-    },
-    []
-  );
+  const handleVehicleSelect = useCallback((vehicleId: string, routeId: string | undefined) => {
+    if (routeId) {
+      setSelectedRouteId(routeId);
+    }
+    setSelectedVehicleId(vehicleId);
+  }, []);
 
-  const selectedRoute = selectedRouteId
-    ? routeIndex.get(selectedRouteId)
-    : undefined;
+  const selectedRoute = selectedRouteId ? routeIndex.get(selectedRouteId) : undefined;
   const selectedRoutePoints = useMemo(() => {
     if (!selectedRoute?.shape || selectedRoute.shape.length < 2) {
       return [];
     }
-    return selectedRoute.shape.map(
-      (point) => [point.lat, point.lon] as [number, number]
-    );
+    return selectedRoute.shape.map((point) => [point.lat, point.lon] as [number, number]);
   }, [selectedRoute]);
 
   const validPositions = positions.filter(
-    (position) =>
-      Number.isFinite(position.lat) && Number.isFinite(position.lon)
+    (position) => Number.isFinite(position.lat) && Number.isFinite(position.lon)
   );
 
   const upcomingStops = useMemo(() => {
@@ -112,23 +94,18 @@ export default function MapView({ positions, routes }: MapViewProps) {
     const nowSeconds = Date.now() / 1000;
     return arrivalsQuery.data.stops
       .map((stop) => {
-        const predictedTime =
-          stop.arrivalTime ?? stop.departureTime ?? null;
+        const predictedTime = stop.arrivalTime ?? stop.departureTime ?? null;
         if (!predictedTime) {
           return null;
         }
-        const minutesAway = Math.round(
-          (predictedTime - nowSeconds) / 60
-        );
+        const minutesAway = Math.round((predictedTime - nowSeconds) / 60);
         return {
           ...stop,
           predictedTime,
           minutesAway,
         };
       })
-      .filter(
-        (stop): stop is Exclude<typeof stop, null> => Boolean(stop)
-      )
+      .filter((stop): stop is Exclude<typeof stop, null> => Boolean(stop))
       .filter((stop) => stop.predictedTime >= nowSeconds - 60)
       .sort((a, b) => a.predictedTime - b.predictedTime)
       .slice(0, 5);
@@ -175,9 +152,7 @@ export default function MapView({ positions, routes }: MapViewProps) {
         {selectedVehicleId &&
           upcomingStopsWithCoords.map((stop, index) => (
             <TripStopMarker
-              key={`${stop.stopId ?? "stop"}-${
-                stop.stopSequence ?? index
-              }`}
+              key={`${stop.stopId ?? "stop"}-${stop.stopSequence ?? index}`}
               stop={stop}
               index={index}
             />

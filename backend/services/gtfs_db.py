@@ -123,13 +123,17 @@ async def save_cached_static(
         return False
 
 
-async def clear_cache(feed_url: Optional[str] = None, db_path: Optional[str] = None) -> bool:
+async def clear_cache(
+    feed_url: Optional[str] = None, db_path: Optional[str] = None
+) -> bool:
     """Delete cached entries, optionally for a single *feed_url*."""
     try:
         conn = await _get_connection(db_path or _get_db_path())
         try:
             if feed_url:
-                await conn.execute("DELETE FROM static_cache WHERE feed_url = ?", (feed_url,))
+                await conn.execute(
+                    "DELETE FROM static_cache WHERE feed_url = ?", (feed_url,)
+                )
             else:
                 await conn.execute("DELETE FROM static_cache")
             await conn.commit()
