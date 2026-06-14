@@ -299,6 +299,38 @@ class Cache:
         async with self._lock:
             return [dict(update) for update in self._trip_updates]
 
+    async def get_trip_details(self, trip_id: str) -> Optional[Dict[str, Any]]:
+        """Return enriched stop-time details for a trip, or None if not found.
+
+        The returned dict carries all fields from the matching trip update
+        (including the stop-time list) with stop_name / stop_lat / stop_lon
+        merged into each stop entry.
+        """
+        await self.ensure_fresh()
+        async with self._lock:
+            update = next(
+                (item for item in self._trip_updates if item.get("trip_id") == trip_id),
+                None,
+            )
+            if update is None:
+                return None
+
+            stops_index = self._stops
+            enriched_stops = []
+            for stop_update in update.get("stop_time_updates", []):
+                stop_id = stop_update.get("stop_id")
+                entry = dict(stop_update)
+                if stop_id:
+                    info = stops_index.get(stop_id, {})
+                    entry["stop_name"] = info.get("stop_name")
+                    entry["stop_lat"] = info.get("stop_lat")
+                    entry["stop_lon"] = info.get("stop_lon")
+                enriched_stops.append(entry)
+
+            result = dict(update)
+            result["stop_time_updates"] = enriched_stops
+            return result
+
     async def get_last_updated(self) -> Optional[str]:
         """Return the last refresh timestamp in ISO 8601 format."""
         async with self._lock:
