@@ -3,18 +3,27 @@ API routes for vehicles, routes, and health checks.
 """
 
 import logging
+import re
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import tomllib
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict
 
-from services.cache import get_cache
+from services.cache import Cache, get_cache
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Read version from pyproject.toml at import time
+_PYPROJECT_PATH = Path(__file__).resolve().parent.parent / "pyproject.toml"
+try:
+    _match = re.search(r'^version\s*=\s*"([^"]+)"', _PYPROJECT_PATH.read_text(), re.M)
+    APP_VERSION: str = _match.group(1) if _match else "unknown"
+except Exception:
+    APP_VERSION = "unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -159,6 +168,15 @@ async def health() -> HealthResponse:
         "cache": cache_sizes,
         "feeds": feed_health,
     }
+
+
+@router.post("/api/refresh")
+async def refresh_cache() -> Dict[str, str]:
+    """Force an immediate refresh of the GTFS cache."""
+    cache: Cache = get_cache()
+    await cache.refresh_once()
+    logger.info("Manual cache refresh triggered via /api/refresh")
+    return {"status": "ok"}
 
 
 @router.get(
