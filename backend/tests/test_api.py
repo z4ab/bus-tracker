@@ -3,6 +3,8 @@ from fastapi.testclient import TestClient
 
 import api.routes as routes_module
 
+APP_VERSION = "0.1.0"
+
 
 class FakeCache:
     def __init__(self) -> None:
@@ -124,6 +126,7 @@ def test_health(monkeypatch) -> None:
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
+    assert data["version"] == APP_VERSION
     assert data["last_updated"] == fake._last_updated
     assert data["cache"] == {
         "vehicles": 1,

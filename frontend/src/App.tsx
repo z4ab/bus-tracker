@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiPost } from "./api/client";
 import MapView from "./components/MapView";
+import Sidebar from "./components/Sidebar";
 import { useRoutes } from "./hooks/useRoutes";
 import { useVehiclePositions } from "./hooks/useVehiclePositions";
 import type { CacheStatus } from "./api/types";
@@ -47,6 +48,8 @@ export default function App() {
 
   return (
     <div className="flex h-screen">
+      {/* Sidebar */}
+      <Sidebar routes={routes} positions={positions} loading={loading} />
       {/* Main Content */}
       <div className="flex-1 relative min-w-0">
         {/* Refresh button */}
