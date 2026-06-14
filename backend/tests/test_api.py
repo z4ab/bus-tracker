@@ -47,6 +47,12 @@ class FakeCache:
             }
         }
         self._last_updated = "2025-03-09T12:00:00Z"
+        self._feed_health = {
+            "grt_vehicle_positions": "ok",
+            "lrt_vehicle_positions": "ok",
+            "grt_trip_updates": "ok",
+            "grt_static": "ok",
+        }
 
     async def get_vehicles(self):
         return list(self._vehicles)
@@ -70,6 +76,17 @@ class FakeCache:
 
     async def get_last_updated(self):
         return self._last_updated
+
+    async def get_cache_sizes(self) -> dict:
+        return {
+            "vehicles": len(self._vehicles),
+            "routes": len(self._routes),
+            "stops": len(self._stops),
+            "trip_updates": 0,
+        }
+
+    async def get_feed_health(self) -> dict:
+        return dict(self._feed_health)
 
     async def get_trip_details(self, trip_id: str):
         update = self._trip_details.get(trip_id)
@@ -99,13 +116,27 @@ def _build_app(monkeypatch):
 
 
 def test_health(monkeypatch) -> None:
-    app, _ = _build_app(monkeypatch)
+    app, fake = _build_app(monkeypatch)
     client = TestClient(app)
 
     response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    data = response.json()
+    assert data["status"] == "ok"
+    assert data["last_updated"] == fake._last_updated
+    assert data["cache"] == {
+        "vehicles": 1,
+        "routes": 1,
+        "stops": 1,
+        "trip_updates": 0,
+    }
+    assert data["feeds"] == {
+        "grt_vehicle_positions": "ok",
+        "lrt_vehicle_positions": "ok",
+        "grt_trip_updates": "ok",
+        "grt_static": "ok",
+    }
 
 
 def test_list_vehicles(monkeypatch) -> None:
