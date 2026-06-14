@@ -50,6 +50,11 @@ const fetchVehicleArrivals = async (vehicleId: string) => {
   return toArrivals(response);
 };
 
+/**
+ * Fetch predicted arrivals for a vehicle at upcoming stops.
+ * Used by MapView to show a vehicle's upcoming stops popup.
+ * Available for future vehicle-detail panels or timeline views.
+ */
 export const useVehicleArrivals = (vehicleId: string | null) =>
   useQuery({
     queryKey: ["vehicle-arrivals", vehicleId],
