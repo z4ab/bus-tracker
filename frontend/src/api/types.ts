@@ -56,3 +56,10 @@ export interface Stop {
   wheelchairBoarding?: number;
   transportType?: string;
 }
+
+export interface CacheStatus {
+  lastUpdated: string;
+  lastRefreshAgeSeconds: number | null;
+  stale: boolean;
+  refreshError: string | null;
+}
