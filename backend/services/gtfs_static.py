@@ -1,6 +1,7 @@
 """Helpers for fetching and parsing GTFS static schedule data."""
 
 import csv
+import gzip
 import io
 import logging
 import zipfile
@@ -132,8 +133,19 @@ def _parse_shapes(shapes_bytes: bytes) -> Dict[str, List[Dict[str, Any]]]:
 
 
 def parse_gtfs_static_bundle(zip_bytes: bytes) -> Dict[str, Dict[str, Any]]:
-    """Parse a GTFS zip file and return routes and stops metadata."""
-    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+    """Parse a GTFS zip file and return routes and stops metadata.
+
+    If the zip bytes are gzip-encoded (some feeds wrap the zip with
+    ``Content-Encoding: gzip``), decompress transparently before parsing.
+    """
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
+    except zipfile.BadZipFile:
+        logger.debug("Bytes are not a valid zip — trying gzip decompress")
+        zip_bytes = gzip.decompress(zip_bytes)
+        zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
+
+    with zf:
         routes_name = _get_member_name(zf, "routes.txt")
         if not routes_name:
             raise RuntimeError("GTFS static feed is missing routes.txt")
