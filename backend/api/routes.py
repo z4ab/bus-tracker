@@ -15,9 +15,18 @@ router = APIRouter()
 
 
 @router.get("/health")
-async def health() -> Dict[str, str]:
-    """Return a simple readiness response."""
-    return {"status": "ok"}
+async def health() -> Dict[str, Any]:
+    """Return health status with cache metadata and feed health."""
+    cache = get_cache()
+    last_updated = await cache.get_last_updated()
+    cache_sizes = await cache.get_cache_sizes()
+    feed_health = await cache.get_feed_health()
+    return {
+        "status": "ok",
+        "last_updated": last_updated,
+        "cache": cache_sizes,
+        "feeds": feed_health,
+    }
 
 
 @router.get("/api/vehicles")

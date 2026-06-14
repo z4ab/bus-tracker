@@ -26,6 +26,7 @@ class Cache:
         self._last_updated_at: Optional[datetime] = None
         self._refresh_failed: bool = False
         self._refresh_error: Optional[str] = None
+        self._feed_health: Dict[str, str] = {}
         self._previous_positions: Dict[str, Dict[str, float]] = {}
         self._lock = asyncio.Lock()
         self._refresh_lock = asyncio.Lock()
@@ -133,8 +134,10 @@ class Cache:
             for vehicle in grt_vehicles:
                 vehicle["transport_type"] = "bus"
             vehicles.extend(grt_vehicles)
+            self._feed_health["grt_vehicle_positions"] = "ok"
         except Exception:
             logger.exception("Failed to fetch GRT vehicle positions")
+            self._feed_health["grt_vehicle_positions"] = "error"
             any_failure = True
 
         # Fetch LRT data if configured
@@ -147,8 +150,10 @@ class Cache:
                 for vehicle in lrt_vehicles:
                     vehicle["transport_type"] = "lrt"
                 vehicles.extend(lrt_vehicles)
+                self._feed_health["lrt_vehicle_positions"] = "ok"
             except Exception:
                 logger.exception("Failed to fetch LRT vehicle positions")
+                self._feed_health["lrt_vehicle_positions"] = "error"
                 any_failure = True
 
         if self._settings.GRT_TRIP_UPDATES_URL:
@@ -159,8 +164,10 @@ class Cache:
                 )
                 for update in trip_updates:
                     update["transport_type"] = "bus"
+                self._feed_health["grt_trip_updates"] = "ok"
             except Exception:
                 logger.exception("Failed to fetch GTFS-realtime trip updates")
+                self._feed_health["grt_trip_updates"] = "error"
                 any_failure = True
 
         # Fetch LRT trip updates if configured
@@ -183,12 +190,18 @@ class Cache:
         # Static data changes infrequently; prefer SQLite cache and only
         # re-fetch when the feed's Last-Modified / ETag changes.
         if not self._routes or not self._stops:
-            bundle = await gtfs_static.fetch_static_bundle_cached(
-                self._settings.GRT_GTFS_STATIC_URL,
-                allow_weak_tls=self._settings.GRT_ALLOW_WEAK_TLS,
-            )
-            routes = bundle.get("routes", {})
-            stops = bundle.get("stops", {})
+            try:
+                bundle = await gtfs_static.fetch_static_bundle_cached(
+                    self._settings.GRT_GTFS_STATIC_URL,
+                    allow_weak_tls=self._settings.GRT_ALLOW_WEAK_TLS,
+                )
+                routes = bundle.get("routes", {})
+                stops = bundle.get("stops", {})
+                self._feed_health["grt_static"] = "ok"
+            except Exception:
+                logger.exception("Failed to fetch GRT static data")
+                self._feed_health["grt_static"] = "error"
+                any_failure = True
 
             # Fetch LRT static data if configured
             if self._settings.LRT_GTFS_STATIC_URL:
@@ -201,8 +214,10 @@ class Cache:
                     lrt_stops = lrt_bundle.get("stops", {})
                     routes.update(lrt_routes)
                     stops.update(lrt_stops)
+                    self._feed_health["lrt_static"] = "ok"
                 except Exception:
                     logger.exception("Failed to fetch LRT static data")
+                    self._feed_health["lrt_static"] = "error"
 
         now = datetime.now(timezone.utc)
         timestamp = now.isoformat()
@@ -352,6 +367,21 @@ class Cache:
         """Return the last refresh timestamp in ISO 8601 format."""
         async with self._lock:
             return self._last_updated
+
+    async def get_cache_sizes(self) -> Dict[str, int]:
+        """Return the count of items currently held in each cache bucket."""
+        async with self._lock:
+            return {
+                "vehicles": len(self._vehicles),
+                "routes": len(self._routes),
+                "stops": len(self._stops),
+                "trip_updates": len(self._trip_updates),
+            }
+
+    async def get_feed_health(self) -> Dict[str, str]:
+        """Return the health status of each GTFS feed."""
+        async with self._lock:
+            return dict(self._feed_health)
 
     async def get_cache_status(self) -> Dict[str, Any]:
         """Return cache freshness metadata including staleness info.
