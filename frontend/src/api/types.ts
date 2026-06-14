@@ -45,3 +45,14 @@ export interface VehicleArrivals {
   updatedAt?: string;
   stops: VehicleArrivalStop[];
 }
+
+export interface Stop {
+  stopId: string;
+  stopName?: string;
+  stopLat: number;
+  stopLon: number;
+  distanceM: number;
+  zoneId?: string;
+  wheelchairBoarding?: number;
+  transportType?: string;
+}
