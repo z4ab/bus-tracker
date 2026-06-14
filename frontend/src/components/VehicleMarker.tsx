@@ -4,6 +4,8 @@ import { renderToString } from "react-dom/server";
 import L from "leaflet";
 import type { Route, VehiclePosition } from "../api/types";
 
+const CACHE_MAX = 500;
+
 const RouteMarker = ({
   shortName,
   color,
@@ -73,6 +75,9 @@ export default function VehicleMarker({ position, routeIndex, onSelect }: Vehicl
     const cacheKey = `${shortName}-${color}-${textColor}-${transportType ?? ""}`;
     const cached = iconCache.current.get(cacheKey);
     if (cached) {
+      // Promote to most recently used
+      iconCache.current.delete(cacheKey);
+      iconCache.current.set(cacheKey, cached);
       return cached;
     }
 
@@ -84,6 +89,13 @@ export default function VehicleMarker({ position, routeIndex, onSelect }: Vehicl
     });
 
     iconCache.current.set(cacheKey, icon);
+    // Evict oldest entry if over capacity
+    if (iconCache.current.size > CACHE_MAX) {
+      const firstKey = iconCache.current.keys().next().value;
+      if (firstKey !== undefined) {
+        iconCache.current.delete(firstKey);
+      }
+    }
     return icon;
   };
 
