@@ -24,6 +24,8 @@ class Cache:
         self._trip_updates: List[Dict[str, Any]] = []
         self._last_updated: Optional[str] = None
         self._last_updated_at: Optional[datetime] = None
+        self._refresh_failed: bool = False
+        self._refresh_error: Optional[str] = None
         self._previous_positions: Dict[str, Dict[str, float]] = {}
         self._lock = asyncio.Lock()
         self._refresh_lock = asyncio.Lock()
@@ -120,15 +122,20 @@ class Cache:
         routes: Dict[str, Dict[str, Any]] = {}
         stops: Dict[str, Dict[str, Any]] = {}
         trip_updates: Optional[List[Dict[str, Any]]] = None
+        any_failure = False
 
         # Fetch GRT (bus) data
-        grt_vehicles = await gtfs_realtime.fetch_vehicle_positions(
-            self._settings.GRT_VEHICLE_POSITIONS_URL,
-            allow_weak_tls=self._settings.GRT_ALLOW_WEAK_TLS,
-        )
-        for vehicle in grt_vehicles:
-            vehicle["transport_type"] = "bus"
-        vehicles.extend(grt_vehicles)
+        try:
+            grt_vehicles = await gtfs_realtime.fetch_vehicle_positions(
+                self._settings.GRT_VEHICLE_POSITIONS_URL,
+                allow_weak_tls=self._settings.GRT_ALLOW_WEAK_TLS,
+            )
+            for vehicle in grt_vehicles:
+                vehicle["transport_type"] = "bus"
+            vehicles.extend(grt_vehicles)
+        except Exception:
+            logger.exception("Failed to fetch GRT vehicle positions")
+            any_failure = True
 
         # Fetch LRT data if configured
         if self._settings.LRT_VEHICLE_POSITIONS_URL:
@@ -142,6 +149,7 @@ class Cache:
                 vehicles.extend(lrt_vehicles)
             except Exception:
                 logger.exception("Failed to fetch LRT vehicle positions")
+                any_failure = True
 
         if self._settings.GRT_TRIP_UPDATES_URL:
             try:
@@ -153,6 +161,7 @@ class Cache:
                     update["transport_type"] = "bus"
             except Exception:
                 logger.exception("Failed to fetch GTFS-realtime trip updates")
+                any_failure = True
 
         # Fetch LRT trip updates if configured
         if self._settings.LRT_TRIP_UPDATES_URL:
@@ -169,6 +178,7 @@ class Cache:
                     trip_updates = lrt_updates
             except Exception:
                 logger.exception("Failed to fetch LRT trip updates")
+                any_failure = True
 
         # Static data changes infrequently; only fetch once per process.
         if not self._routes or not self._stops:
@@ -207,6 +217,12 @@ class Cache:
                 self._stops = stops
             self._last_updated = timestamp
             self._last_updated_at = now
+            if any_failure:
+                self._refresh_failed = True
+                self._refresh_error = "One or more GTFS feeds failed to refresh"
+            else:
+                self._refresh_failed = False
+                self._refresh_error = None
 
     async def _run(self) -> None:
         """Continuously refresh the cache on a fixed interval."""
@@ -303,6 +319,42 @@ class Cache:
         """Return the last refresh timestamp in ISO 8601 format."""
         async with self._lock:
             return self._last_updated
+
+    async def get_cache_status(self) -> Dict[str, Any]:
+        """Return cache freshness metadata including staleness info.
+
+        Returns a dict with:
+          - last_updated: ISO 8601 timestamp of last successful refresh
+          - last_refresh_age_seconds: seconds since last refresh
+          - stale: True if a feed refresh failed or data is too old
+          - refresh_error: error message if a feed failed, else None
+        """
+        async with self._lock:
+            last_updated = self._last_updated
+            last_updated_at = self._last_updated_at
+            refresh_failed = self._refresh_failed
+            refresh_error = self._refresh_error
+
+        age_seconds: Optional[int] = None
+        stale = False
+        if last_updated_at is not None:
+            age_seconds = int(
+                (datetime.now(timezone.utc) - last_updated_at).total_seconds()
+            )
+            # Consider data stale if age exceeds 2x the refresh interval
+            stale_age = self._settings.REFRESH_SECONDS * 2
+            if age_seconds >= stale_age:
+                stale = True
+
+        if refresh_failed:
+            stale = True
+
+        return {
+            "last_updated": last_updated,
+            "last_refresh_age_seconds": age_seconds,
+            "stale": stale,
+            "refresh_error": refresh_error,
+        }
 
 
 _cache: Optional[Cache] = None

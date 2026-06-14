@@ -20,11 +20,12 @@ async def health() -> Dict[str, str]:
 
 
 @router.get("/api/vehicles")
-async def list_vehicles() -> Dict[str, List[Dict[str, Any]]]:
-    """Return the latest vehicle positions."""
+async def list_vehicles() -> Dict[str, Any]:
+    """Return the latest vehicle positions with cache freshness metadata."""
     cache = get_cache()
     vehicles = await cache.get_vehicles()
-    return {"vehicles": vehicles}
+    status = await cache.get_cache_status()
+    return {"vehicles": vehicles, **status}
 
 
 @router.get("/api/vehicles/{vehicle_id}")

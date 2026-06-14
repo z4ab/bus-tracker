@@ -38,6 +38,14 @@ class FakeCache:
     async def get_routes(self):
         return dict(self._routes)
 
+    async def get_cache_status(self) -> dict:
+        return {
+            "last_updated": None,
+            "last_refresh_age_seconds": None,
+            "stale": False,
+            "refresh_error": None,
+        }
+
 
 def _build_app(monkeypatch):
     fake = FakeCache()
@@ -64,7 +72,11 @@ def test_list_vehicles(monkeypatch) -> None:
     response = client.get("/api/vehicles")
 
     assert response.status_code == 200
-    assert response.json() == {"vehicles": fake._vehicles}
+    data = response.json()
+    assert data["vehicles"] == fake._vehicles
+    assert data["stale"] is False
+    assert data["last_refresh_age_seconds"] is None
+    assert data["last_updated"] is None
 
 
 def test_get_vehicle(monkeypatch) -> None:
