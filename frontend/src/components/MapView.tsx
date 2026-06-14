@@ -68,12 +68,26 @@ export default function MapView({ positions, routes }: MapViewProps) {
     }
   }, [userLocation]);
 
-  const handleVehicleSelect = useCallback((vehicleId: string, routeId: string | undefined) => {
-    if (routeId) {
-      setSelectedRouteId(routeId);
-    }
-    setSelectedVehicleId(vehicleId);
-  }, []);
+  const handleVehicleSelect = useCallback(
+    (vehicleId: string, routeId: string | undefined) => {
+      if (routeId) {
+        setSelectedRouteId(routeId);
+      }
+      setSelectedVehicleId(vehicleId);
+
+      // Fly to the selected vehicle
+      const vehicle = positions.find((p) => p.id === vehicleId);
+      if (
+        vehicle &&
+        mapRef.current &&
+        Number.isFinite(vehicle.lat) &&
+        Number.isFinite(vehicle.lon)
+      ) {
+        mapRef.current.flyTo([vehicle.lat, vehicle.lon], 14, { duration: 1 });
+      }
+    },
+    [positions]
+  );
 
   const selectedRoute = selectedRouteId ? routeIndex.get(selectedRouteId) : undefined;
   const selectedRoutePoints = useMemo(() => {
