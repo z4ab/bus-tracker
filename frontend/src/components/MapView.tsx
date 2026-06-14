@@ -5,10 +5,11 @@ import type { Route, VehiclePosition } from "../api/types";
 import { useVehicleArrivals } from "../hooks/useVehicleArrivals";
 import { useNearbyStops } from "../hooks/useNearbyStops";
 import MapBindings from "./MapBindings";
+import Sidebar from "./Sidebar";
 import VehicleMarker from "./VehicleMarker";
+import SelectedVehicleMarker from "./SelectedVehicleMarker";
 import UserMarker from "./UserMarker";
 import TripStopMarker from "./TripStopMarker";
-import NearbyStopsPanel from "./NearbyStopsPanel";
 
 interface MapViewProps {
   positions: VehiclePosition[];
@@ -35,6 +36,7 @@ export default function MapView({ positions, routes }: MapViewProps) {
 
   // Nearby stops — fetched via debounced map center
   const nearbyStopsQuery = useNearbyStops(mapCenter);
+  const nearbyStops = nearbyStopsQuery.data ?? [];
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -87,7 +89,16 @@ export default function MapView({ positions, routes }: MapViewProps) {
     (position) => Number.isFinite(position.lat) && Number.isFinite(position.lon)
   );
 
-  const upcomingStops = useMemo(() => {
+  const selectedVehiclePosition = useMemo(() => {
+    if (!selectedVehicleId) return null;
+    const pos = positions.find((p) => p.id === selectedVehicleId);
+    if (!pos || !Number.isFinite(pos.lat) || !Number.isFinite(pos.lon)) {
+      return null;
+    }
+    return pos;
+  }, [selectedVehicleId, positions]);
+
+  const stopsWithStatus = useMemo(() => {
     if (!arrivalsQuery.data) {
       return [];
     }
@@ -99,84 +110,98 @@ export default function MapView({ positions, routes }: MapViewProps) {
           return null;
         }
         const minutesAway = Math.round((predictedTime - nowSeconds) / 60);
+        const passed = predictedTime < nowSeconds;
         return {
           ...stop,
           predictedTime,
           minutesAway,
+          passed,
         };
       })
       .filter((stop): stop is Exclude<typeof stop, null> => Boolean(stop))
-      .filter((stop) => stop.predictedTime >= nowSeconds - 60)
       .sort((a, b) => a.predictedTime - b.predictedTime)
-      .slice(0, 5);
+      .slice(0, 10);
   }, [arrivalsQuery.data]);
 
-  const upcomingStopsWithCoords = useMemo(() => {
-    return upcomingStops.filter(
+  const stopsWithCoords = useMemo(() => {
+    return stopsWithStatus.filter(
       (
         stop
       ): stop is typeof stop & {
         stopLat: number;
         stopLon: number;
+        passed: boolean;
       } =>
         typeof stop.stopLat === "number" &&
         Number.isFinite(stop.stopLat) &&
         typeof stop.stopLon === "number" &&
         Number.isFinite(stop.stopLon)
     );
-  }, [upcomingStops]);
+  }, [stopsWithStatus]);
 
   return (
-    <div className="relative h-full w-full">
-      <MapContainer
-        center={defaultCenter}
-        zoom={defaultZoom}
-        scrollWheelZoom
-        className="h-full w-full"
-      >
-        <TileLayer
-          attribution="&copy; OpenStreetMap contributors"
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        {userLocation && <UserMarker position={userLocation} />}
-        {selectedRoutePoints.length > 1 && (
-          <Polyline
-            positions={selectedRoutePoints}
-            pathOptions={{
-              color: selectedRoute?.color ?? "#1976d2",
-              weight: 6,
-              opacity: 0.9,
-            }}
+    <div className="flex h-full w-full">
+      <Sidebar
+        routes={routes}
+        positions={validPositions}
+        nearbyStops={nearbyStops}
+        selectedRouteId={selectedRouteId}
+        onSelectRoute={setSelectedRouteId}
+        loading={false}
+      />
+      <div className="flex-1 relative min-w-0">
+        <MapContainer
+          center={defaultCenter}
+          zoom={defaultZoom}
+          scrollWheelZoom
+          className="h-full w-full"
+        >
+          <TileLayer
+            attribution="&copy; OpenStreetMap contributors"
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-        )}
-        {selectedVehicleId &&
-          upcomingStopsWithCoords.map((stop, index) => (
-            <TripStopMarker
-              key={`${stop.stopId ?? "stop"}-${stop.stopSequence ?? index}`}
-              stop={stop}
-              index={index}
+          {userLocation && <UserMarker position={userLocation} />}
+          {selectedRoutePoints.length > 1 && (
+            <Polyline
+              positions={selectedRoutePoints}
+              pathOptions={{
+                color: selectedRoute?.color ?? "#1976d2",
+                weight: 6,
+                opacity: 0.9,
+              }}
+            />
+          )}
+          {selectedVehicleId &&
+            stopsWithCoords.map((stop, index) => (
+              <TripStopMarker
+                key={`${stop.stopId ?? "stop"}-${stop.stopSequence ?? index}`}
+                stop={stop}
+                index={index}
+                passed={stop.passed}
+              />
+            ))}
+          {selectedVehiclePosition && (
+            <SelectedVehicleMarker
+              position={[selectedVehiclePosition.lat, selectedVehiclePosition.lon]}
+              color={selectedRoute?.color ?? selectedVehiclePosition.routeColor}
+            />
+          )}
+          {validPositions.map((position) => (
+            <VehicleMarker
+              key={position.id}
+              position={position}
+              routeIndex={routeIndex}
+              onSelect={handleVehicleSelect}
             />
           ))}
-        {validPositions.map((position) => (
-          <VehicleMarker
-            key={position.id}
-            position={position}
-            routeIndex={routeIndex}
-            onSelect={handleVehicleSelect}
+          <MapBindings
+            mapRef={mapRef}
+            onCenterChange={handleCenterChange}
+            onZoomToLocation={handleZoomToLocation}
+            userLocationEnabled={!!userLocation}
           />
-        ))}
-        <MapBindings
-          mapRef={mapRef}
-          onCenterChange={handleCenterChange}
-          onZoomToLocation={handleZoomToLocation}
-          userLocationEnabled={!!userLocation}
-        />
-      </MapContainer>
-
-      {/* Nearby stops overlay (debug / info) */}
-      {nearbyStopsQuery.data && nearbyStopsQuery.data.length > 0 && (
-        <NearbyStopsPanel stops={nearbyStopsQuery.data} />
-      )}
+        </MapContainer>
+      </div>
     </div>
   );
 }

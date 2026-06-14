@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import type { VehicleArrivalStop } from "../api/types";
-import { buildStopMarkerHtml } from "./StopMarker";
+import { buildStopMarkerHtml, buildPassedStopMarkerHtml } from "./StopMarker";
 
 const formatMinutes = (minutes: number) => {
   if (minutes <= 0) {
@@ -14,9 +14,10 @@ const formatMinutes = (minutes: number) => {
 interface TripStopMarkerProps {
   stop: VehicleArrivalStop & { minutesAway: number; stopLat: number; stopLon: number };
   index: number;
+  passed?: boolean;
 }
 
-export default function TripStopMarker({ stop }: TripStopMarkerProps) {
+export default function TripStopMarker({ stop, passed }: TripStopMarkerProps) {
   const iconCache = useRef(new Map<string, L.DivIcon>());
 
   const getStopIcon = (label: string) => {
@@ -36,8 +37,26 @@ export default function TripStopMarker({ stop }: TripStopMarkerProps) {
     return icon;
   };
 
+  const getPassedStopIcon = (label: string) => {
+    const cacheKey = `passed-${label}`;
+    const cached = iconCache.current.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const icon = L.divIcon({
+      className: "stop-marker",
+      html: buildPassedStopMarkerHtml(label),
+      iconSize: [60, 24],
+      iconAnchor: [6, 12],
+    });
+
+    iconCache.current.set(cacheKey, icon);
+    return icon;
+  };
+
   const label = formatMinutes(stop.minutesAway);
-  const icon = getStopIcon(label);
+  const icon = passed ? getPassedStopIcon(label) : getStopIcon(label);
 
   return (
     <Marker position={[stop.stopLat, stop.stopLon]} icon={icon} zIndexOffset={300}>
