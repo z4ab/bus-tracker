@@ -4,6 +4,8 @@ import L from "leaflet";
 import type { VehicleArrivalStop } from "../api/types";
 import { buildStopMarkerHtml } from "./StopMarker";
 
+const CACHE_MAX = 500;
+
 const formatMinutes = (minutes: number) => {
   if (minutes <= 0) {
     return "due";
@@ -22,6 +24,9 @@ export default function TripStopMarker({ stop }: TripStopMarkerProps) {
   const getStopIcon = (label: string) => {
     const cached = iconCache.current.get(label);
     if (cached) {
+      // Promote to most recently used
+      iconCache.current.delete(label);
+      iconCache.current.set(label, cached);
       return cached;
     }
 
@@ -33,6 +38,13 @@ export default function TripStopMarker({ stop }: TripStopMarkerProps) {
     });
 
     iconCache.current.set(label, icon);
+    // Evict oldest entry if over capacity
+    if (iconCache.current.size > CACHE_MAX) {
+      const firstKey = iconCache.current.keys().next().value;
+      if (firstKey !== undefined) {
+        iconCache.current.delete(firstKey);
+      }
+    }
     return icon;
   };
 
