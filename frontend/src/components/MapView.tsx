@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
+import { MapContainer, Marker, Polyline, Popup, TileLayer } from "react-leaflet";
 import { renderToString } from "react-dom/server";
-import L, { Control } from "leaflet";
+import L from "leaflet";
 import type { Route, VehiclePosition } from "../api/types";
 import { useVehicleArrivals } from "../hooks/useVehicleArrivals";
+import { useNearbyStops } from "../hooks/useNearbyStops";
+import MapBindings from "./MapBindings";
 
 interface MapViewProps {
   positions: VehiclePosition[];
@@ -66,68 +68,6 @@ const buildStopMarkerHtml = (label: string) => {
   return renderToString(<StopMarker label={label} />);
 };
 
-// Custom Leaflet Control for locating user
-class LocateControl extends Control {
-  private onLocate: (() => void) | null = null;
-  private isDisabled = true;
-
-  setOnLocate(callback: () => void, isDisabled: boolean) {
-    this.onLocate = callback;
-    this.isDisabled = isDisabled;
-    if (this._button) {
-      this._button.disabled = isDisabled;
-    }
-  }
-
-  private _button: HTMLButtonElement | null = null;
-
-  onAdd() {
-    const container = L.DomUtil.create("div", "leaflet-control leaflet-bar");
-    this._button = L.DomUtil.create("button", "", container) as HTMLButtonElement;
-    this._button.type = "button";
-    this._button.disabled = this.isDisabled;
-    this._button.title = "Zoom to your location";
-    this._button.className =
-      "bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2 transition flex items-center justify-center w-9 h-9";
-
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("class", "w-5 h-5");
-    svg.setAttribute("fill", "none");
-    svg.setAttribute("stroke", "currentColor");
-    svg.setAttribute("viewBox", "0 0 24 24");
-
-    const path1 = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path1.setAttribute("stroke-linecap", "round");
-    path1.setAttribute("stroke-linejoin", "round");
-    path1.setAttribute("stroke-width", "2");
-    path1.setAttribute("d", "M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z");
-
-    const path2 = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path2.setAttribute("stroke-linecap", "round");
-    path2.setAttribute("stroke-linejoin", "round");
-    path2.setAttribute("stroke-width", "2");
-    path2.setAttribute("d", "M15 11a3 3 0 11-6 0 3 3 0 016 0z");
-
-    svg.appendChild(path1);
-    svg.appendChild(path2);
-    this._button.appendChild(svg);
-
-    L.DomEvent.on(this._button, "click", () => {
-      if (this.onLocate && !this.isDisabled) {
-        this.onLocate();
-      }
-    });
-
-    L.DomEvent.disableClickPropagation(this._button);
-
-    return container;
-  }
-
-  onRemove() {
-    this._button = null;
-  }
-}
-
 // Stop marker component
 const StopMarker = ({ label }: { label: string }) => (
   <div className="flex items-center gap-1.5" style={{ transform: "translate(-6px, -6px)" }}>
@@ -156,20 +96,37 @@ export default function MapView({ positions, routes }: MapViewProps) {
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const arrivalsQuery = useVehicleArrivals(selectedVehicleId);
+
+  // Nearby stops — fetched via debounced map center
+  const nearbyStopsQuery = useNearbyStops(mapCenter);
 
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           setUserLocation([position.coords.latitude, position.coords.longitude]);
+          // Default center to user location on first load
+          if (!mapCenter) {
+            setMapCenter([position.coords.latitude, position.coords.longitude]);
+          }
         },
         () => {
-          // Silently fail if geolocation is denied
+          // Silently fail if geolocation is denied; use default center
+          if (!mapCenter) {
+            setMapCenter(defaultCenter);
+          }
         }
       );
+    } else if (!mapCenter) {
+      setMapCenter(defaultCenter);
     }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleCenterChange = useCallback((lat: number, lon: number) => {
+    setMapCenter([lat, lon]);
   }, []);
 
   const handleZoomToLocation = useCallback(() => {
@@ -366,52 +323,27 @@ export default function MapView({ positions, routes }: MapViewProps) {
             </Marker>
           );
         })}
-        <MapRefCapture 
-          mapRef={mapRef} 
+        <MapBindings
+          mapRef={mapRef}
+          onCenterChange={handleCenterChange}
           onZoomToLocation={handleZoomToLocation}
           userLocationEnabled={!!userLocation}
         />
       </MapContainer>
+
+      {/* Nearby stops overlay (debug / info) */}
+      {nearbyStopsQuery.data && nearbyStopsQuery.data.length > 0 && (
+        <div className="absolute bottom-4 left-4 z-[1000] bg-white/90 backdrop-blur rounded-lg shadow-lg p-3 text-xs max-w-64 max-h-48 overflow-y-auto">
+          <div className="font-semibold text-gray-800 mb-1">
+            Nearby Stops ({nearbyStopsQuery.data.length})
+          </div>
+          {nearbyStopsQuery.data.slice(0, 5).map((stop) => (
+            <div key={stop.stopId} className="text-gray-600 truncate">
+              {stop.stopName ?? stop.stopId} — {stop.distanceM.toFixed(0)}m
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
-}
-
-// Capture map ref inside MapContainer
-function MapRefCapture({ 
-  mapRef, 
-  onZoomToLocation,
-  userLocationEnabled,
-}: { 
-  mapRef: React.MutableRefObject<L.Map | null>,
-  onZoomToLocation: () => void,
-  userLocationEnabled: boolean,
-}) {
-  const map = useMap();
-  const controlRef = useRef<LocateControl | null>(null);
-  
-  useEffect(() => {
-    mapRef.current = map;
-  }, [map, mapRef]);
-
-  useEffect(() => {
-    if (!map) return;
-
-    // Add locate control if not already added
-    if (!controlRef.current) {
-      const control = new LocateControl({ position: "topright" });
-      control.addTo(map);
-      controlRef.current = control;
-    }
-
-    // Update control state
-    if (controlRef.current) {
-      controlRef.current.setOnLocate(onZoomToLocation, !userLocationEnabled);
-    }
-
-    return () => {
-      // Cleanup is optional; controls typically persist for the map's lifetime
-    };
-  }, [map, onZoomToLocation, userLocationEnabled]);
-
-  return null;
 }
