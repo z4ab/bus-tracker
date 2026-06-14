@@ -30,7 +30,12 @@ class FakeCache:
                 "stop_name": "Main St",
                 "stop_lat": 43.1,
                 "stop_lon": -80.1,
-            }
+            },
+            "stop-2": {
+                "stop_name": "Elm Ave",
+                "stop_lat": 43.2,
+                "stop_lon": -80.2,
+            },
         }
         self._trip_details = {
             "trip-1": {
@@ -89,22 +94,73 @@ class FakeCache:
         return dict(self._feed_health)
 
     async def get_trip_details(self, trip_id: str):
+        # Simulate predicted path.
         update = self._trip_details.get(trip_id)
-        if update is None:
-            return None
-        result = dict(update)
-        enriched_stops = []
-        for stop_update in update.get("stop_time_updates", []):
-            entry = dict(stop_update)
-            stop_id = stop_update.get("stop_id")
-            if stop_id and stop_id in self._stops:
-                info = self._stops[stop_id]
+        if update is not None:
+            result = dict(update)
+            enriched_stops = []
+            for stop_update in update.get("stop_time_updates", []):
+                entry = dict(stop_update)
+                entry["source"] = "predicted"
+                stop_id = stop_update.get("stop_id")
+                if stop_id and stop_id in self._stops:
+                    info = self._stops[stop_id]
+                    entry["stop_name"] = info.get("stop_name")
+                    entry["stop_lat"] = info.get("stop_lat")
+                    entry["stop_lon"] = info.get("stop_lon")
+                enriched_stops.append(entry)
+            result["stop_time_updates"] = enriched_stops
+            return result
+
+        # Simulate scheduled fallback for trip-2.
+        if trip_id == "trip-2":
+            stops_index = {
+                "stop-1": {
+                    "stop_name": "Main St",
+                    "stop_lat": 43.1,
+                    "stop_lon": -80.1,
+                },
+                "stop-2": {
+                    "stop_name": "Elm Ave",
+                    "stop_lat": 43.2,
+                    "stop_lon": -80.2,
+                },
+            }
+            enriched_stops = []
+            for st in [
+                {
+                    "stop_id": "stop-1",
+                    "stop_sequence": 1,
+                    "arrival_time": "08:00:00",
+                    "departure_time": "08:00:00",
+                },
+                {
+                    "stop_id": "stop-2",
+                    "stop_sequence": 2,
+                    "arrival_time": "08:15:00",
+                    "departure_time": "08:15:00",
+                },
+            ]:
+                entry = {
+                    "stop_id": st["stop_id"],
+                    "stop_sequence": st["stop_sequence"],
+                    "arrival_time": st["arrival_time"],
+                    "departure_time": st["departure_time"],
+                    "source": "scheduled",
+                }
+                info = stops_index.get(st["stop_id"], {})
                 entry["stop_name"] = info.get("stop_name")
                 entry["stop_lat"] = info.get("stop_lat")
                 entry["stop_lon"] = info.get("stop_lon")
-            enriched_stops.append(entry)
-        result["stop_time_updates"] = enriched_stops
-        return result
+                enriched_stops.append(entry)
+
+            return {
+                "trip_id": trip_id,
+                "stop_time_updates": enriched_stops,
+                "source": "scheduled",
+            }
+
+        return None
 
 
 def _build_app(monkeypatch):
@@ -128,7 +184,7 @@ def test_health(monkeypatch) -> None:
     assert data["cache"] == {
         "vehicles": 1,
         "routes": 1,
-        "stops": 1,
+        "stops": 2,
         "trip_updates": 0,
     }
     assert data["feeds"] == {
@@ -183,7 +239,7 @@ def test_list_routes(monkeypatch) -> None:
     assert response.json() == {"routes": list(fake._routes.values())}
 
 
-def test_get_vehicle_arrivals(monkeypatch) -> None:
+def test_get_vehicle_arrivals_predicted(monkeypatch) -> None:
     app, _ = _build_app(monkeypatch)
     client = TestClient(app)
 
@@ -199,6 +255,7 @@ def test_get_vehicle_arrivals(monkeypatch) -> None:
     assert len(data["stops"]) == 1
     assert data["stops"][0]["stop_id"] == "stop-1"
     assert data["stops"][0]["stop_name"] == "Main St"
+    assert data["stops"][0]["source"] == "predicted"
 
 
 def test_get_vehicle_arrivals_no_trip(monkeypatch) -> None:
@@ -208,6 +265,37 @@ def test_get_vehicle_arrivals_no_trip(monkeypatch) -> None:
     response = client.get("/api/vehicles/veh-1/arrivals")
 
     assert response.status_code == 200
+
+
+def test_get_vehicle_arrivals_scheduled(monkeypatch) -> None:
+    """Vehicle with trip_id that only exists as static stop_times."""
+    app, fake = _build_app(monkeypatch)
+    # Add a vehicle with trip-2 which FakeCache handles as scheduled.
+    fake._vehicles.append(
+        {
+            "vehicle_id": "veh-2",
+            "trip_id": "trip-2",
+            "route_id": "route-2",
+            "latitude": 43.5,
+            "longitude": -80.5,
+            "bearing": 0.0,
+            "speed": 5.0,
+            "timestamp": 1710000000,
+        }
+    )
+    client = TestClient(app)
+
+    response = client.get("/api/vehicles/veh-2/arrivals")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["vehicle_id"] == "veh-2"
+    assert data["trip_id"] == "trip-2"
+    assert len(data["stops"]) == 2
+    assert data["stops"][0]["source"] == "scheduled"
+    assert data["stops"][1]["source"] == "scheduled"
+    assert data["stops"][0]["stop_name"] == "Main St"
+    assert data["stops"][1]["stop_name"] == "Elm Ave"
 
 
 def test_get_vehicle_arrivals_not_found(monkeypatch) -> None:

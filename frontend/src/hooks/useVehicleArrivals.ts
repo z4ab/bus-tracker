@@ -12,6 +12,7 @@ type VehicleArrivalStopApi = {
   arrival_delay?: number | null;
   departure_time?: number | null;
   departure_delay?: number | null;
+  source?: string | null;
 };
 
 type VehicleArrivalsApi = {
@@ -33,6 +34,7 @@ const toStop = (raw: VehicleArrivalStopApi): VehicleArrivalStop => ({
   arrivalDelay: raw.arrival_delay ?? undefined,
   departureTime: raw.departure_time ?? undefined,
   departureDelay: raw.departure_delay ?? undefined,
+  source: (raw.source as "predicted" | "scheduled") ?? undefined,
 });
 
 const toArrivals = (raw: VehicleArrivalsApi): VehicleArrivals => ({

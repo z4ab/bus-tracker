@@ -32,6 +32,17 @@ async def test_save_and_load_round_trip(db_path: str) -> None:
             "stop_lon": -80.0,
         },
     }
+    stop_times = {
+        "trip-1": [
+            {
+                "trip_id": "trip-1",
+                "stop_id": "S1",
+                "stop_sequence": 1,
+                "arrival_time": "08:00:00",
+                "departure_time": "08:00:00",
+            }
+        ]
+    }
     last_modified = "Mon, 01 Jun 2026 12:00:00 GMT"
 
     saved = await save_cached_static(
@@ -40,6 +51,7 @@ async def test_save_and_load_round_trip(db_path: str) -> None:
         stops,
         last_modified=last_modified,
         db_path=db_path,
+        stop_times=stop_times,
     )
     assert saved is True
 
@@ -47,6 +59,7 @@ async def test_save_and_load_round_trip(db_path: str) -> None:
     assert loaded is not None
     assert loaded["routes"] == routes
     assert loaded["stops"] == stops
+    assert loaded["stop_times"] == stop_times
     assert loaded["last_modified"] == last_modified
     assert loaded["etag"] is None
 
@@ -78,6 +91,7 @@ async def test_upsert_replaces_existing_entry(db_path: str) -> None:
     assert loaded is not None
     assert loaded["last_modified"] == "new"
     assert loaded["routes"] == routes_v2
+    assert loaded["stop_times"] == {}
 
 
 @pytest.mark.asyncio
@@ -137,3 +151,4 @@ async def test_etag_caching(db_path: str) -> None:
 
     assert loaded is not None
     assert loaded["etag"] == etag
+    assert loaded["stop_times"] == {}

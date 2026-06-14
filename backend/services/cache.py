@@ -21,6 +21,7 @@ class Cache:
         self._vehicles: List[Dict[str, Any]] = []
         self._routes: Dict[str, Dict[str, Any]] = {}
         self._stops: Dict[str, Dict[str, Any]] = {}
+        self._stop_times: Dict[str, List[Dict[str, Any]]] = {}
         self._trip_updates: List[Dict[str, Any]] = []
         self._last_updated: Optional[str] = None
         self._last_updated_at: Optional[datetime] = None
@@ -122,6 +123,7 @@ class Cache:
         vehicles: List[Dict[str, Any]] = []
         routes: Dict[str, Dict[str, Any]] = {}
         stops: Dict[str, Dict[str, Any]] = {}
+        stop_times: Dict[str, List[Dict[str, Any]]] = {}
         trip_updates: Optional[List[Dict[str, Any]]] = None
         any_failure = False
 
@@ -197,6 +199,7 @@ class Cache:
                 )
                 routes = bundle.get("routes", {})
                 stops = bundle.get("stops", {})
+                stop_times = bundle.get("stop_times", {})
                 self._feed_health["grt_static"] = "ok"
             except Exception:
                 logger.exception("Failed to fetch GRT static data")
@@ -212,8 +215,10 @@ class Cache:
                     )
                     lrt_routes = lrt_bundle.get("routes", {})
                     lrt_stops = lrt_bundle.get("stops", {})
+                    lrt_stop_times = lrt_bundle.get("stop_times", {})
                     routes.update(lrt_routes)
                     stops.update(lrt_stops)
+                    stop_times.update(lrt_stop_times)
                     self._feed_health["lrt_static"] = "ok"
                 except Exception:
                     logger.exception("Failed to fetch LRT static data")
@@ -231,6 +236,8 @@ class Cache:
                 self._routes = routes
             if stops:
                 self._stops = stops
+            if stop_times:
+                self._stop_times = stop_times
             self._last_updated = timestamp
             self._last_updated_at = now
             if any_failure:
@@ -338,12 +345,42 @@ class Cache:
         async with self._lock:
             return [dict(update) for update in self._trip_updates]
 
+    @staticmethod
+    def _hhmmss_to_timestamp(time_str: str) -> Optional[int]:
+        """Convert a GTFS "HH:MM:SS" string to a UTC unix timestamp for today.
+
+        Handles times >= 24:00:00 (past-midnight trips) by wrapping into
+        the next day(s).
+        """
+        if not time_str:
+            return None
+        parts = time_str.split(":")
+        if len(parts) != 3:
+            return None
+        try:
+            hours = int(parts[0])
+            minutes = int(parts[1])
+            seconds = int(parts[2])
+        except ValueError:
+            return None
+
+        total_seconds = hours * 3600 + minutes * 60 + seconds
+        # Get start of today in UTC.
+        now = datetime.now(timezone.utc)
+        today_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        timestamp = int(today_midnight.timestamp()) + total_seconds
+        return timestamp
+
     async def get_trip_details(self, trip_id: str) -> Optional[Dict[str, Any]]:
         """Return enriched stop-time details for a trip, or None if not found.
 
-        The returned dict carries all fields from the matching trip update
-        (including the stop-time list) with stop_name / stop_lat / stop_lon
-        merged into each stop entry.
+        First looks for a real-time trip update.  If found, stop entries are
+        enriched with stop metadata and marked with ``source: "predicted"``.
+
+        If no real-time update exists, falls back to static ``stop_times.txt``
+        data.  Static entries are enriched with stop metadata, have their
+        ``arrival_time`` / ``departure_time`` computed as UTC timestamps from
+        the raw HH:MM:SS strings, and are marked with ``source: "scheduled"``.
         """
         await self.ensure_fresh()
         async with self._lock:
@@ -351,14 +388,46 @@ class Cache:
                 (item for item in self._trip_updates if item.get("trip_id") == trip_id),
                 None,
             )
-            if update is None:
-                return None
 
             stops_index = self._stops
+
+            if update is not None:
+                # Real-time prediction path.
+                enriched_stops = []
+                for stop_update in update.get("stop_time_updates", []):
+                    stop_id = stop_update.get("stop_id")
+                    entry = dict(stop_update)
+                    entry["source"] = "predicted"
+                    if stop_id:
+                        info = stops_index.get(stop_id, {})
+                        entry["stop_name"] = info.get("stop_name")
+                        entry["stop_lat"] = info.get("stop_lat")
+                        entry["stop_lon"] = info.get("stop_lon")
+                    enriched_stops.append(entry)
+
+                result = dict(update)
+                result["stop_time_updates"] = enriched_stops
+                return result
+
+            # Static schedule fallback.
+            static_stops = self._stop_times.get(trip_id)
+            if not static_stops:
+                return None
+
             enriched_stops = []
-            for stop_update in update.get("stop_time_updates", []):
-                stop_id = stop_update.get("stop_id")
-                entry = dict(stop_update)
+            for stop_time in static_stops:
+                stop_id = stop_time.get("stop_id")
+                entry = {
+                    "stop_id": stop_id,
+                    "stop_sequence": stop_time.get("stop_sequence"),
+                    "arrival_time": self._hhmmss_to_timestamp(
+                        stop_time.get("arrival_time")
+                    ),
+                    "departure_time": self._hhmmss_to_timestamp(
+                        stop_time.get("departure_time")
+                    ),
+                    "source": "scheduled",
+                }
                 if stop_id:
                     info = stops_index.get(stop_id, {})
                     entry["stop_name"] = info.get("stop_name")
@@ -366,9 +435,11 @@ class Cache:
                     entry["stop_lon"] = info.get("stop_lon")
                 enriched_stops.append(entry)
 
-            result = dict(update)
-            result["stop_time_updates"] = enriched_stops
-            return result
+            return {
+                "trip_id": trip_id,
+                "stop_time_updates": enriched_stops,
+                "source": "scheduled",
+            }
 
     async def get_last_updated(self) -> Optional[str]:
         """Return the last refresh timestamp in ISO 8601 format."""

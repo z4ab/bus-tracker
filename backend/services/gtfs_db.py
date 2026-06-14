@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS static_cache (
     etag TEXT,
     routes TEXT NOT NULL,
     stops TEXT NOT NULL,
+    stop_times TEXT NOT NULL DEFAULT '{}',
     cached_at REAL NOT NULL
 );
 """
@@ -51,16 +52,24 @@ async def load_cached_static(
     feed_url: str,
     db_path: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Load cached routes and stops for *feed_url* from SQLite.
+    """Load cached routes, stops, and stop_times for *feed_url* from SQLite.
 
-    Returns ``{"routes": …, "stops": …, "last_modified": …, "etag": …}``
+    Returns ``{"routes": …, "stops": …, "stop_times": …, "last_modified": …, "etag": …}``
     if a record exists, or ``None`` on cache miss / any error.
     """
     try:
         conn = await _get_connection(db_path or _get_db_path())
         try:
+            # Attempt to migrate old schema by adding stop_times column if missing.
+            try:
+                await conn.execute(
+                    "ALTER TABLE static_cache ADD COLUMN stop_times TEXT NOT NULL DEFAULT '{}'"
+                )
+            except Exception:
+                pass  # column already exists
+
             cursor = await conn.execute(
-                "SELECT last_modified, etag, routes, stops FROM static_cache WHERE feed_url = ?",
+                "SELECT last_modified, etag, routes, stops, stop_times FROM static_cache WHERE feed_url = ?",
                 (feed_url,),
             )
             row = await cursor.fetchone()
@@ -70,6 +79,7 @@ async def load_cached_static(
             return {
                 "routes": json.loads(row["routes"]),
                 "stops": json.loads(row["stops"]),
+                "stop_times": json.loads(row["stop_times"]),
                 "last_modified": row["last_modified"],
                 "etag": row["etag"],
             }
@@ -87,6 +97,7 @@ async def save_cached_static(
     last_modified: Optional[str] = None,
     etag: Optional[str] = None,
     db_path: Optional[str] = None,
+    stop_times: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """Persist parsed static data to SQLite, keyed by *feed_url*.
 
@@ -97,13 +108,14 @@ async def save_cached_static(
         conn = await _get_connection(db_path or _get_db_path())
         try:
             await conn.execute(
-                """INSERT INTO static_cache (feed_url, last_modified, etag, routes, stops, cached_at)
-                   VALUES (?, ?, ?, ?, ?, ?)
+                """INSERT INTO static_cache (feed_url, last_modified, etag, routes, stops, stop_times, cached_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(feed_url) DO UPDATE SET
                        last_modified = excluded.last_modified,
                        etag = excluded.etag,
                        routes = excluded.routes,
                        stops = excluded.stops,
+                       stop_times = excluded.stop_times,
                        cached_at = excluded.cached_at""",
                 (
                     feed_url,
@@ -111,6 +123,7 @@ async def save_cached_static(
                     etag,
                     json.dumps(routes),
                     json.dumps(stops),
+                    json.dumps(stop_times or {}),
                     time.time(),
                 ),
             )

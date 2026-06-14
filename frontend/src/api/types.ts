@@ -35,6 +35,7 @@ export interface VehicleArrivalStop {
   arrivalDelay?: number;
   departureTime?: number;
   departureDelay?: number;
+  source?: "predicted" | "scheduled";
 }
 
 export interface VehicleArrivals {

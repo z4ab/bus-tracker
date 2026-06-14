@@ -31,6 +31,11 @@ def _build_zip_bytes() -> bytes:
             "shapeA,43.1,-80.1,1\n"
             "shapeA,43.2,-80.2,2\n",
         )
+        zf.writestr(
+            "stop_times.txt",
+            "trip_id,arrival_time,departure_time,stop_id,stop_sequence\n"
+            "trip-1,08:00:00,08:00:00,stop-1,1\n",
+        )
     return buffer.getvalue()
 
 
@@ -82,6 +87,7 @@ async def test_fetch_static_bundle_cached_cache_hit(db_path, mock_create_client)
         bundle["stops"],
         last_modified=last_modified,
         db_path=db_path,
+        stop_times=bundle.get("stop_times", {}),
     )
 
     head_count = 0
@@ -105,6 +111,9 @@ async def test_fetch_static_bundle_cached_cache_hit(db_path, mock_create_client)
     assert get_count == 0  # no full download — cache hit
     assert "1" in result["routes"]
     assert result["routes"]["1"]["route_color"] == "#FF0000"
+    assert "trip-1" in result["stop_times"]
+    assert len(result["stop_times"]["trip-1"]) == 1
+    assert result["stop_times"]["trip-1"][0]["stop_id"] == "stop-1"
 
 
 @pytest.mark.asyncio
@@ -141,6 +150,8 @@ async def test_fetch_static_bundle_cached_cache_miss(db_path, mock_create_client
     cached = await load_cached_static(feed_url, db_path=db_path)
     assert cached is not None
     assert cached["last_modified"] == last_modified
+    assert "trip-1" in cached["stop_times"]
+    assert cached["stop_times"]["trip-1"][0]["stop_id"] == "stop-1"
 
 
 @pytest.mark.asyncio
@@ -161,6 +172,7 @@ async def test_fetch_static_bundle_cached_head_fails(db_path, mock_create_client
     result = await fetch_static_bundle_cached(feed_url, db_path=db_path)
 
     assert "1" in result["routes"]
+    assert "stop_times" in result
 
 
 @pytest.mark.asyncio
