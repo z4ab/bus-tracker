@@ -16,7 +16,7 @@ interface TripStopMarkerProps {
   index: number;
 }
 
-export default function TripStopMarker({ stop, index }: TripStopMarkerProps) {
+export default function TripStopMarker({ stop }: TripStopMarkerProps) {
   const iconCache = useRef(new Map<string, L.DivIcon>());
 
   const getStopIcon = (label: string) => {

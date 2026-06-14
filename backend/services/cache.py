@@ -308,7 +308,9 @@ class Cache:
             for stop_id, info in self._stops.items():
                 s_lat = info.get("stop_lat")
                 s_lon = info.get("stop_lon")
-                if not (isinstance(s_lat, (int, float)) and isinstance(s_lon, (int, float))):
+                if not (
+                    isinstance(s_lat, (int, float)) and isinstance(s_lon, (int, float))
+                ):
                     continue
                 s_lat_r = math.radians(float(s_lat))
                 s_lon_r = math.radians(float(s_lon))
@@ -320,7 +322,12 @@ class Cache:
                 )
                 dist = RADIUS_EARTH_M * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
                 if dist <= radius_m:
-                    scored.append((dist, {**info, "stop_id": stop_id, "distance_m": round(dist, 1)}))
+                    scored.append(
+                        (
+                            dist,
+                            {**info, "stop_id": stop_id, "distance_m": round(dist, 1)},
+                        )
+                    )
 
         scored.sort(key=lambda t: t[0])
         return [item for _, item in scored[:limit]]

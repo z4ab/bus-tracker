@@ -57,13 +57,9 @@ def mock_create_client(monkeypatch):
             clients_used.append(client)
             return client
 
-        monkeypatch.setattr(
-            "services.gtfs_static.create_async_client", factory
-        )
+        monkeypatch.setattr("services.gtfs_static.create_async_client", factory)
         # Also patch it in http_client (where it lives) so the import-through works.
-        monkeypatch.setattr(
-            "services.http_client.create_async_client", factory
-        )
+        monkeypatch.setattr("services.http_client.create_async_client", factory)
         return clients_used
 
     return _patch

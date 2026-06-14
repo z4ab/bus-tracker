@@ -60,16 +60,10 @@ interface VehicleMarkerProps {
   onSelect: (vehicleId: string, routeId: string | undefined) => void;
 }
 
-export default function VehicleMarker({
-  position,
-  routeIndex,
-  onSelect,
-}: VehicleMarkerProps) {
+export default function VehicleMarker({ position, routeIndex, onSelect }: VehicleMarkerProps) {
   const iconCache = useRef(new Map<string, L.DivIcon>());
 
-  const route = position.routeId
-    ? routeIndex.get(position.routeId)
-    : undefined;
+  const route = position.routeId ? routeIndex.get(position.routeId) : undefined;
   const shortName = position.routeShortName ?? route?.shortName ?? "?";
   const color = position.routeColor ?? route?.color ?? "#1976d2";
   const textColor = route?.textColor ?? "#ffffff";
