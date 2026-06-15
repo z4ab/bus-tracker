@@ -329,9 +329,7 @@ class Cache:
                 tid: list(entries) for tid, entries in self._stop_times.items()
             }
             trip_routes_snapshot = dict(self._trip_routes)
-            routes_snapshot = {
-                rid: dict(info) for rid, info in self._routes.items()
-            }
+            routes_snapshot = {rid: dict(info) for rid, info in self._routes.items()}
         return self._departure.get_stop_departures(
             stop_id,
             trip_updates_snapshot,

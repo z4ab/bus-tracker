@@ -264,7 +264,9 @@ async def get_stop_departures(
     stop_id: str, limit: int = 10, route_id: Optional[str] = None
 ) -> StopDeparturesResponse:
     cache = get_cache()
-    departures = await cache.get_stop_departures(stop_id, limit=limit, route_id=route_id)
+    departures = await cache.get_stop_departures(
+        stop_id, limit=limit, route_id=route_id
+    )
     return {"stop_id": stop_id, "departures": departures}
 
 

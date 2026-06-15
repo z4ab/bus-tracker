@@ -141,7 +141,9 @@ class FakeCache:
         result["stop_time_updates"] = enriched_stops
         return result
 
-    async def get_stop_departures(self, stop_id: str, limit: int = 10, route_id: Optional[str] = None):
+    async def get_stop_departures(
+        self, stop_id: str, limit: int = 10, route_id: Optional[str] = None
+    ):
         from datetime import datetime, timezone
 
         departures = []
@@ -173,16 +175,8 @@ class FakeCache:
                 else:
                     arr_str = entry.get("arrival_time")
                     dep_str = entry.get("departure_time")
-                    arr = (
-                        _stop_time_to_timestamp(arr_str, today)
-                        if arr_str
-                        else None
-                    )
-                    dep = (
-                        _stop_time_to_timestamp(dep_str, today)
-                        if dep_str
-                        else None
-                    )
+                    arr = _stop_time_to_timestamp(arr_str, today) if arr_str else None
+                    dep = _stop_time_to_timestamp(dep_str, today) if dep_str else None
                     deptype = "scheduled"
 
                 ref = dep if dep is not None else arr
@@ -190,23 +184,27 @@ class FakeCache:
                     continue
                 minutes_away = (ref - now_ts) // 60
 
-                departures.append({
-                    "trip_id": tid,
-                    "route_id": rid,
-                    "route_short_name": route_info.get("route_short_name"),
-                    "route_color": route_info.get("route_color"),
-                    "stop_id": stop_id,
-                    "arrival_time": arr,
-                    "departure_time": dep,
-                    "type": deptype,
-                    "minutes_away": minutes_away,
-                })
+                departures.append(
+                    {
+                        "trip_id": tid,
+                        "route_id": rid,
+                        "route_short_name": route_info.get("route_short_name"),
+                        "route_color": route_info.get("route_color"),
+                        "stop_id": stop_id,
+                        "arrival_time": arr,
+                        "departure_time": dep,
+                        "type": deptype,
+                        "minutes_away": minutes_away,
+                    }
+                )
                 break
 
         departures.sort(
-            key=lambda d: d["departure_time"]
-            if d["departure_time"] is not None
-            else (d["arrival_time"] or 0)
+            key=lambda d: (
+                d["departure_time"]
+                if d["departure_time"] is not None
+                else (d["arrival_time"] or 0)
+            )
         )
         return departures[:limit]
 
