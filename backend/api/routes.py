@@ -5,7 +5,7 @@ API routes for vehicles, routes, and health checks.
 import logging
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 import tomllib
 from fastapi import APIRouter, HTTPException
