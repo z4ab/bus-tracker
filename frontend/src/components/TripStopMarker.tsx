@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import type { VehicleArrivalStop } from "../api/types";
-import { buildStopMarkerHtml } from "./StopMarker";
+import { buildPassedStopMarkerHtml, buildStopMarkerHtml } from "./StopMarker";
 
 const CACHE_MAX = 500;
 
@@ -16,9 +16,10 @@ const formatMinutes = (minutes: number) => {
 interface TripStopMarkerProps {
   stop: VehicleArrivalStop & { minutesAway: number; stopLat: number; stopLon: number };
   index: number;
+  passed?: boolean;
 }
 
-export default function TripStopMarker({ stop }: TripStopMarkerProps) {
+export default function TripStopMarker({ stop, passed }: TripStopMarkerProps) {
   const iconCache = useRef(new Map<string, L.DivIcon>());
   const map = useMap();
 
@@ -32,8 +33,8 @@ export default function TripStopMarker({ stop }: TripStopMarkerProps) {
     }
 
     const icon = L.divIcon({
-      className: "stop-marker",
-      html: buildStopMarkerHtml(label),
+      className: passed ? "passed-stop-marker" : "stop-marker",
+      html: passed ? buildPassedStopMarkerHtml(label) : buildStopMarkerHtml(label),
       iconSize: [60, 24],
       iconAnchor: [6, 12],
     });
@@ -49,7 +50,7 @@ export default function TripStopMarker({ stop }: TripStopMarkerProps) {
     return icon;
   };
 
-  const label = formatMinutes(stop.minutesAway);
+  const label = passed ? "\u2713" : formatMinutes(stop.minutesAway);
   const icon = getStopIcon(label);
 
   return (
@@ -68,7 +69,7 @@ export default function TripStopMarker({ stop }: TripStopMarkerProps) {
           <div className="font-semibold text-gray-900">
             {stop.stopName ?? stop.stopId ?? "Stop"}
           </div>
-          <div className="text-gray-600">{label} away</div>
+          <div className="text-gray-600">{passed ? "\u2713 Passed" : `${label} away`}</div>
         </div>
       </Popup>
     </Marker>
