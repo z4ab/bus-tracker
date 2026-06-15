@@ -5,6 +5,7 @@ import type { Route, VehiclePosition } from "../api/types";
 import { useVehicleArrivals } from "../hooks/useVehicleArrivals";
 import { useNearbyStops } from "../hooks/useNearbyStops";
 import MapBindings from "./MapBindings";
+import SelectedVehicleMarker from "./SelectedVehicleMarker";
 import VehicleMarker from "./VehicleMarker";
 import UserMarker from "./UserMarker";
 import TripStopMarker from "./TripStopMarker";
@@ -116,6 +117,15 @@ export default function MapView({ positions, routes }: MapViewProps) {
     (position) => Number.isFinite(position.lat) && Number.isFinite(position.lon)
   );
 
+  // Selected vehicle for showing its position marker on the map
+  const selectedVehicle = selectedVehicleId
+    ? validPositions.find((p) => p.id === selectedVehicleId)
+    : undefined;
+
+  const selectedVehicleRoute = selectedVehicle?.routeId
+    ? routeIndex.get(selectedVehicle.routeId)
+    : undefined;
+
   const upcomingStops = useMemo(() => {
     if (!arrivalsQuery.data) {
       return [];
@@ -132,12 +142,12 @@ export default function MapView({ positions, routes }: MapViewProps) {
           ...stop,
           predictedTime,
           minutesAway,
+          passed: predictedTime < nowSeconds,
         };
       })
       .filter((stop): stop is Exclude<typeof stop, null> => Boolean(stop))
-      .filter((stop) => stop.predictedTime >= nowSeconds - 60)
       .sort((a, b) => a.predictedTime - b.predictedTime)
-      .slice(0, 5);
+      .slice(0, 10);
   }, [arrivalsQuery.data]);
 
   const upcomingStopsWithCoords = useMemo(() => {
@@ -251,8 +261,17 @@ export default function MapView({ positions, routes }: MapViewProps) {
               key={`${stop.stopId ?? "stop"}-${stop.stopSequence ?? index}`}
               stop={stop}
               index={index}
+              passed={stop.passed}
             />
           ))}
+        {selectedVehicle &&
+          Number.isFinite(selectedVehicle.lat) &&
+          Number.isFinite(selectedVehicle.lon) && (
+            <SelectedVehicleMarker
+              position={[selectedVehicle.lat, selectedVehicle.lon]}
+              color={selectedVehicleRoute?.color}
+            />
+          )}
         {validPositions.map((position) => (
           <VehicleMarker
             key={position.id}
