@@ -155,9 +155,8 @@ export default function MapView({
         };
       })
       .filter((stop): stop is Exclude<typeof stop, null> => Boolean(stop))
-      .filter((stop) => stop.predictedTime >= nowSeconds - 60)
       .sort((a, b) => a.predictedTime - b.predictedTime)
-      .slice(0, 5);
+      .slice(0, 10);
   }, [arrivalsQuery.data]);
 
   const upcomingStopsWithCoords = useMemo(() => {
