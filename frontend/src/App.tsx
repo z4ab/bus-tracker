@@ -1,8 +1,10 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiPost } from "./api/client";
 import MapView from "./components/MapView";
+import NearbyStopsPanel from "./components/NearbyStopsPanel";
 import Sidebar from "./components/Sidebar";
+import { useNearbyStops } from "./hooks/useNearbyStops";
 import { useRoutes } from "./hooks/useRoutes";
 import { useVehiclePositions } from "./hooks/useVehiclePositions";
 import type { CacheStatus } from "./api/types";
@@ -25,6 +27,26 @@ export default function App() {
   const queryClient = useQueryClient();
   const routesQuery = useRoutes();
   const positionsQuery = useVehiclePositions();
+
+  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
+  const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
+  const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
+  const [focusedStopIndex, setFocusedStopIndex] = useState<number | null>(null);
+
+  const nearbyStopsQuery = useNearbyStops(mapCenter);
+
+  const handleSelectStop = useCallback((stopId: string) => {
+    setSelectedStopId((prev) => (prev === stopId ? null : stopId));
+  }, []);
+
+  const handleClearStopSelection = useCallback(() => {
+    setSelectedStopId(null);
+    setFocusedStopIndex(null);
+  }, []);
+
+  const handleCenterChange = useCallback((lat: number, lon: number) => {
+    setMapCenter([lat, lon]);
+  }, []);
 
   const handleRefresh = useCallback(async () => {
     try {
@@ -49,7 +71,23 @@ export default function App() {
   return (
     <div className="flex h-screen">
       {/* Sidebar */}
-      <Sidebar routes={routes} positions={positions} loading={loading} />
+      <Sidebar
+        routes={routes}
+        positions={positions}
+        loading={loading}
+        onSelectRoute={setSelectedRouteId}
+        selectedRouteId={selectedRouteId}
+      >
+        <NearbyStopsPanel
+          stops={nearbyStopsQuery.data ?? []}
+          isLoading={nearbyStopsQuery.isLoading}
+          focusedIndex={focusedStopIndex}
+          selectedStopId={selectedStopId}
+          onSelectStop={handleSelectStop}
+          onFocusChange={setFocusedStopIndex}
+        />
+      </Sidebar>
+
       {/* Main Content */}
       <div className="flex-1 relative min-w-0">
         {/* Refresh button */}
@@ -130,7 +168,20 @@ export default function App() {
                 </div>
               </div>
             )}
-            <MapView positions={positions} routes={routes} />
+            <MapView
+              positions={positions}
+              routes={routes}
+              selectedRouteId={selectedRouteId}
+              onSelectRoute={setSelectedRouteId}
+              mapCenter={mapCenter}
+              onCenterChange={handleCenterChange}
+              nearbyStops={nearbyStopsQuery.data ?? []}
+              focusedStopIndex={focusedStopIndex}
+              selectedStopId={selectedStopId}
+              onSelectStop={handleSelectStop}
+              onFocusChange={setFocusedStopIndex}
+              onClearStopSelection={handleClearStopSelection}
+            />
           </>
         )}
       </div>
