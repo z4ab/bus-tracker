@@ -1,5 +1,3 @@
-"""Helpers for fetching and parsing GTFS static schedule data."""
-
 import csv
 import gzip
 import io
@@ -43,7 +41,6 @@ def _parse_routes(routes_bytes: bytes) -> Dict[str, Dict[str, Any]]:
         route_color = row.get("route_color") or None
         route_text_color = row.get("route_text_color") or None
 
-        # Normalize colors to CSS-friendly hex strings if present.
         if route_color and not route_color.startswith("#"):
             route_color = f"#{route_color}"
         if route_text_color and not route_text_color.startswith("#"):
@@ -104,6 +101,48 @@ def _parse_trips(trips_bytes: bytes) -> Dict[str, str]:
     return route_shapes
 
 
+def _parse_trip_routes(trips_bytes: bytes) -> Dict[str, str]:
+    """Parse trips.txt into a dict mapping trip_id to route_id."""
+    trip_routes: Dict[str, str] = {}
+    for row in _read_csv_bytes(trips_bytes):
+        trip_id = row.get("trip_id")
+        route_id = row.get("route_id")
+        if trip_id and route_id:
+            trip_routes[trip_id] = route_id
+    return trip_routes
+
+
+def _parse_stop_times(stop_times_bytes: bytes) -> Dict[str, List[Dict[str, Any]]]:
+    """Parse stop_times.txt into a dict keyed by trip_id.
+
+    Each entry contains stop_id, stop_sequence, arrival_time, and
+    departure_time.  Entries are sorted by stop_sequence within each trip.
+    """
+    stop_times: Dict[str, List[Dict[str, Any]]] = {}
+    for row in _read_csv_bytes(stop_times_bytes):
+        trip_id = row.get("trip_id")
+        stop_id = row.get("stop_id")
+        if not trip_id or not stop_id:
+            continue
+        seq_raw = row.get("stop_sequence", "0")
+        try:
+            stop_sequence = int(seq_raw) if seq_raw else 0
+        except ValueError:
+            stop_sequence = 0
+        entry: Dict[str, Any] = {
+            "stop_id": stop_id,
+            "stop_sequence": stop_sequence,
+            "arrival_time": row.get("arrival_time"),
+            "departure_time": row.get("departure_time"),
+        }
+        stop_times.setdefault(trip_id, []).append(entry)
+
+    for entries in stop_times.values():
+        entries.sort(key=lambda e: e["stop_sequence"])
+
+    return stop_times
+
+
 def _parse_shapes(shapes_bytes: bytes) -> Dict[str, List[Dict[str, Any]]]:
     """Parse shapes.txt into ordered polyline point lists."""
     shapes: Dict[str, List[Dict[str, Any]]] = {}
@@ -124,7 +163,6 @@ def _parse_shapes(shapes_bytes: bytes) -> Dict[str, List[Dict[str, Any]]]:
             continue
         shapes.setdefault(shape_id, []).append(point)
 
-    # Ensure points are in the correct drawing order.
     for shape_id, points in shapes.items():
         points.sort(key=lambda item: item["sequence"])
         shapes[shape_id] = points
@@ -141,7 +179,7 @@ def parse_gtfs_static_bundle(zip_bytes: bytes) -> Dict[str, Dict[str, Any]]:
     try:
         zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
     except zipfile.BadZipFile:
-        logger.debug("Bytes are not a valid zip — trying gzip decompress")
+        logger.debug("Bytes are not a valid zip \u2014 trying gzip decompress")
         zip_bytes = gzip.decompress(zip_bytes)
         zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
 
@@ -159,14 +197,31 @@ def parse_gtfs_static_bundle(zip_bytes: bytes) -> Dict[str, Dict[str, Any]]:
 
         trips_name = _get_member_name(zf, "trips.txt")
         shapes_name = _get_member_name(zf, "shapes.txt")
-        if trips_name and shapes_name:
-            route_shapes = _parse_trips(zf.read(trips_name))
-            shapes = _parse_shapes(zf.read(shapes_name))
-            for route_id, shape_id in route_shapes.items():
-                if route_id in routes and shape_id in shapes:
-                    routes[route_id]["shape"] = shapes[shape_id]
 
-        return {"routes": routes, "stops": stops}
+        trip_routes: Dict[str, str] = {}
+        stop_times: Dict[str, List[Dict[str, Any]]] = {}
+
+        if trips_name:
+            trips_bytes = zf.read(trips_name)
+            trip_routes = _parse_trip_routes(trips_bytes)
+
+            if shapes_name:
+                route_shapes = _parse_trips(trips_bytes)
+                shapes = _parse_shapes(zf.read(shapes_name))
+                for route_id, shape_id in route_shapes.items():
+                    if route_id in routes and shape_id in shapes:
+                        routes[route_id]["shape"] = shapes[shape_id]
+
+        stop_times_name = _get_member_name(zf, "stop_times.txt")
+        if stop_times_name:
+            stop_times = _parse_stop_times(zf.read(stop_times_name))
+
+        return {
+            "routes": routes,
+            "stops": stops,
+            "stop_times": stop_times,
+            "trip_routes": trip_routes,
+        }
 
 
 def parse_gtfs_static_zip(zip_bytes: bytes) -> Dict[str, Dict[str, Any]]:
@@ -229,7 +284,7 @@ async def _head_for_headers(
 ) -> Dict[str, str]:
     """Send a HEAD request and return selected response headers.
 
-    Returns ``{"last_modified": …, "etag": …}``.  Missing or failed headers
+    Returns ``{"last_modified": \u2026, "etag": \u2026}``.  Missing or failed headers
     are returned as ``None``.  If the HEAD request itself fails (network
     error, non-2xx status) an empty dict is returned so the caller falls
     through to a full GET.
@@ -244,7 +299,7 @@ async def _head_for_headers(
                 "etag": response.headers.get("etag"),
             }
     except (httpx.HTTPError, OSError):
-        logger.debug("HEAD request failed for %s — will fall through to GET", url)
+        logger.debug("HEAD request failed for %s \u2014 will fall through to GET", url)
         return {}
 
 
@@ -262,44 +317,51 @@ async def fetch_static_bundle_cached(
        network download.
     3. Otherwise fetch the full zip, parse it, persist to SQLite, and return.
 
-    Returns ``{"routes": …, "stops": …}``.  On cache write failure the
-    parsed data is still returned (the network fetch succeeded); the user
-    just loses persistence until the next call.
+    Returns ``{"routes": \u2026, "stops": \u2026, "stop_times": \u2026, "trip_routes": \u2026}``.
+    On cache write failure the parsed data is still returned (the network
+    fetch succeeded); the user just loses persistence until the next call.
     """
     if not url:
         raise ValueError("GTFS static URL is required")
 
-    # 1. Lightweight HEAD to check for changes.
     server_headers = await _head_for_headers(url, timeout_s, allow_weak_tls)
     server_lm = server_headers.get("last_modified")
     server_etag = server_headers.get("etag")
 
-    # 2. Try SQLite cache.
     cached = await load_cached_static(url, db_path=db_path)
     if cached is not None:
         cached_lm = cached.get("last_modified")
         cached_etag = cached.get("etag")
-        # If the server didn't give us headers, skip the cache (safety).
         if server_lm or server_etag:
             if server_lm and server_lm == cached_lm:
                 logger.debug("Cache HIT for %s (Last-Modified unchanged)", url)
-                return {"routes": cached["routes"], "stops": cached["stops"]}
+                return {
+                    "routes": cached["routes"],
+                    "stops": cached["stops"],
+                    "stop_times": cached.get("stop_times", {}),
+                    "trip_routes": cached.get("trip_routes", {}),
+                }
             if server_etag and server_etag == cached_etag:
                 logger.debug("Cache HIT for %s (ETag unchanged)", url)
-                return {"routes": cached["routes"], "stops": cached["stops"]}
+                return {
+                    "routes": cached["routes"],
+                    "stops": cached["stops"],
+                    "stop_times": cached.get("stop_times", {}),
+                    "trip_routes": cached.get("trip_routes", {}),
+                }
 
-    # 3. Cache miss or changed — fetch full bundle.
     logger.info("Fetching GTFS static feed from %s", url)
     async with create_async_client(timeout_s, allow_weak_tls) as client:
         response = await client.get(url)
         response.raise_for_status()
     bundle = parse_gtfs_static_bundle(response.content)
 
-    # 4. Persist to SQLite (best-effort).
     ok = await save_cached_static(
         url,
         bundle["routes"],
         bundle["stops"],
+        stop_times=bundle.get("stop_times", {}),
+        trip_routes=bundle.get("trip_routes", {}),
         last_modified=server_lm,
         etag=server_etag,
         db_path=db_path,

@@ -18,11 +18,12 @@ class Cache:
     """Cache for vehicle positions and static route metadata."""
 
     def __init__(self, settings: Settings) -> None:
-        """Initialize cache storage and background task state."""
         self._settings = settings
         self._vehicles: List[Dict[str, Any]] = []
         self._routes: Dict[str, Dict[str, Any]] = {}
         self._stops: Dict[str, Dict[str, Any]] = {}
+        self._stop_times: Dict[str, List[Dict[str, Any]]] = {}
+        self._trip_routes: Dict[str, str] = {}
         self._trip_updates: List[Dict[str, Any]] = []
         self._last_updated: Optional[str] = None
         self._last_updated_at: Optional[datetime] = None
@@ -43,7 +44,6 @@ class Cache:
         lat2: float,
         lon2: float,
     ) -> Optional[float]:
-        """Compute initial bearing from (lat1, lon1) to (lat2, lon2)."""
         if lat1 == lat2 and lon1 == lon2:
             return None
 
@@ -62,7 +62,6 @@ class Cache:
     def _apply_fallback_bearings(
         self, vehicles: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
-        """Fill missing bearings using the previous position for each vehicle."""
         next_previous: Dict[str, Dict[str, float]] = {}
 
         for vehicle in vehicles:
@@ -94,7 +93,6 @@ class Cache:
         return vehicles
 
     async def _needs_refresh(self) -> bool:
-        """Return True when cached data is missing or stale."""
         refresh_seconds = self._settings.REFRESH_SECONDS
         if refresh_seconds <= 0:
             return True
@@ -109,7 +107,6 @@ class Cache:
         return age_seconds >= refresh_seconds
 
     async def ensure_fresh(self) -> None:
-        """Refresh the cache if it's empty or stale."""
         if not await self._needs_refresh():
             return
 
@@ -122,14 +119,14 @@ class Cache:
                 logger.exception("On-demand cache refresh failed")
 
     async def refresh_once(self) -> None:
-        """Refresh vehicle positions, trip updates, and static data for GRT and LRT."""
         vehicles: List[Dict[str, Any]] = []
         routes: Dict[str, Dict[str, Any]] = {}
         stops: Dict[str, Dict[str, Any]] = {}
+        stop_times: Dict[str, List[Dict[str, Any]]] = {}
+        trip_routes: Dict[str, str] = {}
         trip_updates: Optional[List[Dict[str, Any]]] = None
         any_failure = False
 
-        # Fetch GRT (bus) data
         try:
             grt_vehicles = await gtfs_realtime.fetch_vehicle_positions(
                 self._settings.GRT_VEHICLE_POSITIONS_URL,
@@ -144,7 +141,6 @@ class Cache:
             self._feed_health["grt_vehicle_positions"] = "error"
             any_failure = True
 
-        # Fetch LRT data if configured
         if self._settings.LRT_VEHICLE_POSITIONS_URL:
             try:
                 lrt_vehicles = await gtfs_realtime.fetch_vehicle_positions(
@@ -174,7 +170,6 @@ class Cache:
                 self._feed_health["grt_trip_updates"] = "error"
                 any_failure = True
 
-        # Fetch LRT trip updates if configured
         if self._settings.LRT_TRIP_UPDATES_URL:
             try:
                 lrt_updates = await gtfs_realtime.fetch_trip_updates(
@@ -191,8 +186,6 @@ class Cache:
                 logger.exception("Failed to fetch LRT trip updates")
                 any_failure = True
 
-        # Static data changes infrequently; prefer SQLite cache and only
-        # re-fetch when the feed's Last-Modified / ETag changes.
         if not self._routes or not self._stops:
             try:
                 bundle = await gtfs_static.fetch_static_bundle_cached(
@@ -201,13 +194,14 @@ class Cache:
                 )
                 routes = bundle.get("routes", {})
                 stops = bundle.get("stops", {})
+                stop_times = bundle.get("stop_times", {})
+                trip_routes = bundle.get("trip_routes", {})
                 self._feed_health["grt_static"] = "ok"
             except Exception:
                 logger.exception("Failed to fetch GRT static data")
                 self._feed_health["grt_static"] = "error"
                 any_failure = True
 
-            # Fetch LRT static data if configured
             if self._settings.LRT_GTFS_STATIC_URL:
                 try:
                     lrt_bundle = await gtfs_static.fetch_static_bundle_cached(
@@ -216,8 +210,12 @@ class Cache:
                     )
                     lrt_routes = lrt_bundle.get("routes", {})
                     lrt_stops = lrt_bundle.get("stops", {})
+                    lrt_stop_times = lrt_bundle.get("stop_times", {})
+                    lrt_trip_routes = lrt_bundle.get("trip_routes", {})
                     routes.update(lrt_routes)
                     stops.update(lrt_stops)
+                    stop_times.update(lrt_stop_times)
+                    trip_routes.update(lrt_trip_routes)
                     self._feed_health["lrt_static"] = "ok"
                 except Exception:
                     logger.exception("Failed to fetch LRT static data")
@@ -235,6 +233,10 @@ class Cache:
                 self._routes = routes
             if stops:
                 self._stops = stops
+            if stop_times:
+                self._stop_times = stop_times
+            if trip_routes:
+                self._trip_routes = trip_routes
             self._last_updated = timestamp
             self._last_updated_at = now
             if any_failure:
@@ -245,7 +247,6 @@ class Cache:
                 self._refresh_error = None
 
     async def _run(self) -> None:
-        """Continuously refresh the cache on a fixed interval."""
         while True:
             try:
                 await self.refresh_once()
@@ -256,12 +257,10 @@ class Cache:
             await asyncio.sleep(self._settings.REFRESH_SECONDS)
 
     def start(self) -> None:
-        """Start the background refresh task if it is not already running."""
         if self._task is None or self._task.done():
             self._task = asyncio.create_task(self._run())
 
     async def stop(self) -> None:
-        """Stop the background refresh task gracefully."""
         if self._task is None:
             return
         self._task.cancel()
@@ -272,13 +271,11 @@ class Cache:
         self._task = None
 
     async def get_vehicles(self) -> List[Dict[str, Any]]:
-        """Return a snapshot of the latest vehicle list."""
         await self.ensure_fresh()
         async with self._lock:
             return list(self._vehicles)
 
     async def get_vehicle(self, vehicle_id: str) -> Optional[Dict[str, Any]]:
-        """Return a single vehicle entry by ID, if present."""
         await self.ensure_fresh()
         async with self._lock:
             for vehicle in self._vehicles:
@@ -287,13 +284,11 @@ class Cache:
         return None
 
     async def get_routes(self) -> Dict[str, Dict[str, Any]]:
-        """Return a snapshot of the route metadata map."""
         await self.ensure_fresh()
         async with self._lock:
             return {route_id: dict(info) for route_id, info in self._routes.items()}
 
     async def get_stops(self) -> Dict[str, Dict[str, Any]]:
-        """Return a snapshot of the stop metadata map."""
         await self.ensure_fresh()
         async with self._lock:
             return {stop_id: dict(info) for stop_id, info in self._stops.items()}
@@ -301,25 +296,17 @@ class Cache:
     async def get_nearby_stops(
         self, lat: float, lon: float, radius_m: float = 500.0, limit: int = 20
     ) -> List[Dict[str, Any]]:
-        """Return stops within *radius_m* of (lat, lon), sorted by distance."""
         await self.ensure_fresh()
         async with self._lock:
             stops_snapshot = {sid: dict(info) for sid, info in self._stops.items()}
         return self._geo.nearby_stops(stops_snapshot, lat, lon, radius_m, limit)
 
     async def get_trip_updates(self) -> List[Dict[str, Any]]:
-        """Return a snapshot of the latest trip updates."""
         await self.ensure_fresh()
         async with self._lock:
             return [dict(update) for update in self._trip_updates]
 
     async def get_trip_details(self, trip_id: str) -> Optional[Dict[str, Any]]:
-        """Return enriched stop-time details for a trip, or None if not found.
-
-        The returned dict carries all fields from the matching trip update
-        (including the stop-time list) with stop_name / stop_lat / stop_lon
-        merged into each stop entry.
-        """
         await self.ensure_fresh()
         async with self._lock:
             trip_updates_snapshot = [dict(u) for u in self._trip_updates]
@@ -328,35 +315,52 @@ class Cache:
             trip_updates_snapshot, stops_snapshot, trip_id
         )
 
+    async def get_stop_departures(
+        self,
+        stop_id: str,
+        limit: int = 10,
+        route_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        await self.ensure_fresh()
+        async with self._lock:
+            trip_updates_snapshot = [dict(u) for u in self._trip_updates]
+            stops_snapshot = {sid: dict(info) for sid, info in self._stops.items()}
+            stop_times_snapshot = {
+                tid: list(entries) for tid, entries in self._stop_times.items()
+            }
+            trip_routes_snapshot = dict(self._trip_routes)
+            routes_snapshot = {rid: dict(info) for rid, info in self._routes.items()}
+        return self._departure.get_stop_departures(
+            stop_id,
+            trip_updates_snapshot,
+            stops_snapshot,
+            stop_times_snapshot,
+            trip_routes_snapshot,
+            routes_snapshot,
+            limit=limit,
+            route_id=route_id,
+        )
+
     async def get_last_updated(self) -> Optional[str]:
-        """Return the last refresh timestamp in ISO 8601 format."""
         async with self._lock:
             return self._last_updated
 
     async def get_cache_sizes(self) -> Dict[str, int]:
-        """Return the count of items currently held in each cache bucket."""
         async with self._lock:
             return {
                 "vehicles": len(self._vehicles),
                 "routes": len(self._routes),
                 "stops": len(self._stops),
+                "stop_times": len(self._stop_times),
+                "trip_routes": len(self._trip_routes),
                 "trip_updates": len(self._trip_updates),
             }
 
     async def get_feed_health(self) -> Dict[str, str]:
-        """Return the health status of each GTFS feed."""
         async with self._lock:
             return dict(self._feed_health)
 
     async def get_cache_status(self) -> Dict[str, Any]:
-        """Return cache freshness metadata including staleness info.
-
-        Returns a dict with:
-          - last_updated: ISO 8601 timestamp of last successful refresh
-          - last_refresh_age_seconds: seconds since last refresh
-          - stale: True if a feed refresh failed or data is too old
-          - refresh_error: error message if a feed failed, else None
-        """
         async with self._lock:
             last_updated = self._last_updated
             last_updated_at = self._last_updated_at
@@ -369,7 +373,6 @@ class Cache:
             age_seconds = int(
                 (datetime.now(timezone.utc) - last_updated_at).total_seconds()
             )
-            # Consider data stale if age exceeds 2x the refresh interval
             stale_age = self._settings.REFRESH_SECONDS * 2
             if age_seconds >= stale_age:
                 stale = True
@@ -389,7 +392,6 @@ _cache: Optional[Cache] = None
 
 
 def get_cache() -> Cache:
-    """Return the process-wide cache instance."""
     global _cache
     if _cache is None:
         _cache = Cache(load_settings())

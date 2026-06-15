@@ -32,10 +32,10 @@ export default function NearbyStopsPanel({
   }, [focusedIndex]);
 
   return (
-    <div className="absolute bottom-4 left-4 z-[1000] bg-white/90 backdrop-blur rounded-lg shadow-lg p-3 text-xs max-w-64 max-h-48 overflow-y-auto">
+    <div className="px-4 py-3">
       {isLoading ? (
         <>
-          <div className="font-semibold text-gray-800 mb-2">Nearby Stops</div>
+          <div className="font-semibold text-gray-800 mb-2 text-sm">Nearby Stops</div>
           <div className="space-y-2">
             <SkeletonCard lines={2} />
             <SkeletonCard lines={2} />
@@ -43,13 +43,17 @@ export default function NearbyStopsPanel({
           </div>
         </>
       ) : stops.length === 0 ? (
-        <>
-          <div className="font-semibold text-gray-800 mb-1">Nearby Stops</div>
-          <p className="text-gray-500 italic">No stops found nearby — try panning the map</p>
-        </>
+        <div>
+          <div className="font-semibold text-gray-800 mb-1 text-sm">Nearby Stops</div>
+          <p className="text-gray-500 italic text-xs">
+            No stops found nearby — try panning the map
+          </p>
+        </div>
       ) : (
         <>
-          <div className="font-semibold text-gray-800 mb-1.5">Nearby Stops ({stops.length})</div>
+          <div className="font-semibold text-gray-800 mb-1.5 text-sm">
+            Nearby Stops ({stops.length})
+          </div>
           {stops.slice(0, 5).map((stop, index) => {
             const isFocused = focusedIndex === index;
             const isSelected = selectedStopId === stop.stopId;
@@ -63,7 +67,7 @@ export default function NearbyStopsPanel({
                 role="button"
                 tabIndex={isFocused ? 0 : -1}
                 aria-selected={isSelected}
-                className={`truncate cursor-pointer rounded px-1.5 py-1 transition-colors ${
+                className={`truncate cursor-pointer rounded px-1.5 py-1 transition-colors text-xs ${
                   isSelected
                     ? "bg-blue-100 text-blue-800 font-medium"
                     : isFocused

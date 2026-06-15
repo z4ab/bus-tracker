@@ -87,6 +87,27 @@ class ArrivalStopItem(BaseModel):
     stop_lon: Optional[float] = None
 
 
+class DepartureItem(BaseModel):
+    """A single departure for a stop, either predicted or scheduled."""
+
+    trip_id: str
+    route_id: str
+    route_short_name: Optional[str] = None
+    route_color: Optional[str] = None
+    stop_id: str
+    arrival_time: Optional[int] = None
+    departure_time: Optional[int] = None
+    type: str  # "predicted" or "scheduled"
+    minutes_away: Optional[int] = None
+
+
+class StopDeparturesResponse(BaseModel):
+    """Response with upcoming departures for a stop."""
+
+    stop_id: str
+    departures: List[DepartureItem]
+
+
 class HealthResponse(BaseModel):
     """Response from the /health endpoint."""
 
@@ -231,6 +252,22 @@ async def nearby_stops(
     cache = get_cache()
     stops = await cache.get_nearby_stops(lat, lon, radius, limit)
     return {"stops": stops}
+
+
+@router.get(
+    "/api/stops/{stop_id}/departures",
+    response_model=StopDeparturesResponse,
+    tags=["stops"],
+    summary="Get upcoming departures for a stop",
+)
+async def get_stop_departures(
+    stop_id: str, limit: int = 10, route_id: Optional[str] = None
+) -> StopDeparturesResponse:
+    cache = get_cache()
+    departures = await cache.get_stop_departures(
+        stop_id, limit=limit, route_id=route_id
+    )
+    return {"stop_id": stop_id, "departures": departures}
 
 
 @router.get(

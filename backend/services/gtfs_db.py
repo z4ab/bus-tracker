@@ -15,7 +15,6 @@ import aiosqlite
 
 logger = logging.getLogger(__name__)
 
-# Default cache directory under the user's home.
 DEFAULT_CACHE_DIR = os.path.expanduser("~/.cache/bus-tracker")
 CACHE_DB_FILENAME = "gtfs_static_cache.db"
 
@@ -26,23 +25,33 @@ CREATE TABLE IF NOT EXISTS static_cache (
     etag TEXT,
     routes TEXT NOT NULL,
     stops TEXT NOT NULL,
+    stop_times TEXT NOT NULL DEFAULT '{}',
+    trip_routes TEXT NOT NULL DEFAULT '{}',
     cached_at REAL NOT NULL
 );
 """
 
+_MIGRATIONS = [
+    "ALTER TABLE static_cache ADD COLUMN stop_times TEXT NOT NULL DEFAULT '{}'",
+    "ALTER TABLE static_cache ADD COLUMN trip_routes TEXT NOT NULL DEFAULT '{}'",
+]
+
 
 def _get_db_path(cache_dir: Optional[str] = None) -> str:
-    """Return the absolute path to the SQLite cache database."""
     base = cache_dir or os.environ.get("GTFS_CACHE_DIR") or DEFAULT_CACHE_DIR
     os.makedirs(base, exist_ok=True)
     return os.path.join(base, CACHE_DB_FILENAME)
 
 
 async def _get_connection(db_path: str) -> aiosqlite.Connection:
-    """Open (or create) the database and ensure the schema exists."""
     conn = await aiosqlite.connect(db_path)
     conn.row_factory = aiosqlite.Row
     await conn.execute(_SCHEMA_SQL)
+    for migration in _MIGRATIONS:
+        try:
+            await conn.execute(migration)
+        except Exception:
+            pass
     await conn.commit()
     return conn
 
@@ -51,16 +60,11 @@ async def load_cached_static(
     feed_url: str,
     db_path: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Load cached routes and stops for *feed_url* from SQLite.
-
-    Returns ``{"routes": …, "stops": …, "last_modified": …, "etag": …}``
-    if a record exists, or ``None`` on cache miss / any error.
-    """
     try:
         conn = await _get_connection(db_path or _get_db_path())
         try:
             cursor = await conn.execute(
-                "SELECT last_modified, etag, routes, stops FROM static_cache WHERE feed_url = ?",
+                "SELECT last_modified, etag, routes, stops, stop_times, trip_routes FROM static_cache WHERE feed_url = ?",
                 (feed_url,),
             )
             row = await cursor.fetchone()
@@ -70,6 +74,8 @@ async def load_cached_static(
             return {
                 "routes": json.loads(row["routes"]),
                 "stops": json.loads(row["stops"]),
+                "stop_times": json.loads(row["stop_times"]),
+                "trip_routes": json.loads(row["trip_routes"]),
                 "last_modified": row["last_modified"],
                 "etag": row["etag"],
             }
@@ -84,26 +90,25 @@ async def save_cached_static(
     feed_url: str,
     routes: Dict[str, Any],
     stops: Dict[str, Any],
+    stop_times: Optional[Dict[str, Any]] = None,
+    trip_routes: Optional[Dict[str, Any]] = None,
     last_modified: Optional[str] = None,
     etag: Optional[str] = None,
     db_path: Optional[str] = None,
 ) -> bool:
-    """Persist parsed static data to SQLite, keyed by *feed_url*.
-
-    Uses UPSERT so repeated calls are safe.
-    Returns ``True`` on success, ``False`` on failure.
-    """
     try:
         conn = await _get_connection(db_path or _get_db_path())
         try:
             await conn.execute(
-                """INSERT INTO static_cache (feed_url, last_modified, etag, routes, stops, cached_at)
-                   VALUES (?, ?, ?, ?, ?, ?)
+                """INSERT INTO static_cache (feed_url, last_modified, etag, routes, stops, stop_times, trip_routes, cached_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(feed_url) DO UPDATE SET
                        last_modified = excluded.last_modified,
                        etag = excluded.etag,
                        routes = excluded.routes,
                        stops = excluded.stops,
+                       stop_times = excluded.stop_times,
+                       trip_routes = excluded.trip_routes,
                        cached_at = excluded.cached_at""",
                 (
                     feed_url,
@@ -111,6 +116,8 @@ async def save_cached_static(
                     etag,
                     json.dumps(routes),
                     json.dumps(stops),
+                    json.dumps(stop_times or {}),
+                    json.dumps(trip_routes or {}),
                     time.time(),
                 ),
             )
@@ -126,7 +133,6 @@ async def save_cached_static(
 async def clear_cache(
     feed_url: Optional[str] = None, db_path: Optional[str] = None
 ) -> bool:
-    """Delete cached entries, optionally for a single *feed_url*."""
     try:
         conn = await _get_connection(db_path or _get_db_path())
         try:

@@ -1,19 +1,31 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, Polyline, TileLayer } from "react-leaflet";
 import L from "leaflet";
-import type { Route, VehiclePosition } from "../api/types";
+import type { Route, Stop, VehiclePosition } from "../api/types";
 import { useVehicleArrivals } from "../hooks/useVehicleArrivals";
-import { useNearbyStops } from "../hooks/useNearbyStops";
 import MapBindings from "./MapBindings";
 import SelectedVehicleMarker from "./SelectedVehicleMarker";
 import VehicleMarker from "./VehicleMarker";
 import UserMarker from "./UserMarker";
 import TripStopMarker from "./TripStopMarker";
-import NearbyStopsPanel from "./NearbyStopsPanel";
 
 interface MapViewProps {
   positions: VehiclePosition[];
   routes: Route[];
+  selectedRouteId: string | null;
+  onSelectRoute: (routeId: string | null) => void;
+  /** Current map center for nearby-stops queries */
+  mapCenter: [number, number] | null;
+  onCenterChange: (lat: number, lon: number) => void;
+  /** Nearby stops data (fetched by App) */
+  nearbyStops: Stop[];
+  /** Current stop focus/selection (shared with sidebar) */
+  focusedStopIndex: number | null;
+  selectedStopId: string | null;
+  onSelectStop: (stopId: string) => void;
+  onFocusChange: (index: number | null) => void;
+  /** Clear stop-focused state (but not route selection) */
+  onClearStopSelection: () => void;
 }
 
 const defaultCenter: [number, number] = [43.4516, -80.4925];
@@ -25,44 +37,46 @@ const buildRouteIndex = (routes: Route[]) => {
   return map;
 };
 
-export default function MapView({ positions, routes }: MapViewProps) {
+export default function MapView({
+  positions,
+  routes,
+  selectedRouteId,
+  onSelectRoute,
+  mapCenter,
+  onCenterChange,
+  nearbyStops,
+  focusedStopIndex: _focusedStopIndex,
+  selectedStopId,
+  onSelectStop,
+  onFocusChange,
+  onClearStopSelection,
+}: MapViewProps) {
   const routeIndex = useMemo(() => buildRouteIndex(routes), [routes]);
-  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
-  const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
-  const [focusedStopIndex, setFocusedStopIndex] = useState<number | null>(null);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
-  const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const arrivalsQuery = useVehicleArrivals(selectedVehicleId);
 
-  // Nearby stops — fetched via debounced map center
-  const nearbyStopsQuery = useNearbyStops(mapCenter);
-
+  // Set initial map center from geolocation (runs once on mount)
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           setUserLocation([position.coords.latitude, position.coords.longitude]);
-          // Default center to user location on first load
           if (!mapCenter) {
-            setMapCenter([position.coords.latitude, position.coords.longitude]);
+            onCenterChange(position.coords.latitude, position.coords.longitude);
           }
         },
         () => {
-          // Silently fail if geolocation is denied; use default center
           if (!mapCenter) {
-            setMapCenter(defaultCenter);
+            onCenterChange(defaultCenter[0], defaultCenter[1]);
           }
         }
       );
     } else if (!mapCenter) {
-      setMapCenter(defaultCenter);
+      onCenterChange(defaultCenter[0], defaultCenter[1]);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleCenterChange = useCallback((lat: number, lon: number) => {
-    setMapCenter([lat, lon]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleZoomToLocation = useCallback(() => {
@@ -74,11 +88,11 @@ export default function MapView({ positions, routes }: MapViewProps) {
   const handleVehicleSelect = useCallback(
     (vehicleId: string, routeId: string | undefined) => {
       if (routeId) {
-        setSelectedRouteId(routeId);
+        onSelectRoute(routeId);
       }
       setSelectedVehicleId(vehicleId);
       // Clear stop selection when selecting a vehicle
-      setSelectedStopId(null);
+      onClearStopSelection();
 
       // Fly to the selected vehicle
       const vehicle = positions.find((p) => p.id === vehicleId);
@@ -91,19 +105,14 @@ export default function MapView({ positions, routes }: MapViewProps) {
         mapRef.current.flyTo([vehicle.lat, vehicle.lon], 14, { duration: 1 });
       }
     },
-    [positions]
+    [positions, onSelectRoute, onClearStopSelection]
   );
 
-  const handleSelectStop = useCallback((stopId: string) => {
-    setSelectedStopId((prev) => (prev === stopId ? null : stopId));
-  }, []);
-
   const handleClearSelection = useCallback(() => {
-    setSelectedRouteId(null);
+    onSelectRoute(null);
     setSelectedVehicleId(null);
-    setSelectedStopId(null);
-    setFocusedStopIndex(null);
-  }, []);
+    onClearStopSelection();
+  }, [onSelectRoute, onClearStopSelection]);
 
   const selectedRoute = selectedRouteId ? routeIndex.get(selectedRouteId) : undefined;
   const selectedRoutePoints = useMemo(() => {
@@ -167,7 +176,13 @@ export default function MapView({ positions, routes }: MapViewProps) {
 
   // ── Keyboard shortcuts ──────────────────────────────────────────────────────
 
-  const nearbyStops = useMemo(() => nearbyStopsQuery.data ?? [], [nearbyStopsQuery.data]);
+  // Use a ref for focusedStopIndex so the keyboard event handler always has the
+  // latest value without needing it as a useEffect dependency (which would cause
+  // constant add/remove of the listener).
+  const focusedStopIndexRef = useRef<number | null>(null);
+  focusedStopIndexRef.current = _focusedStopIndex;
+
+  const nearbyStopsCurrent = nearbyStops;
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -183,38 +198,42 @@ export default function MapView({ positions, routes }: MapViewProps) {
       switch (e.key) {
         case "Escape": {
           if (selectedStopId) {
-            setSelectedStopId(null);
+            onSelectStop(selectedStopId);
           } else if (selectedVehicleId) {
             handleClearSelection();
           }
-          setFocusedStopIndex(null);
+          onFocusChange(null);
           break;
         }
 
         case "ArrowDown": {
           e.preventDefault();
-          const maxIndex = Math.min(5, nearbyStops.length) - 1;
+          const maxIndex = Math.min(5, nearbyStopsCurrent.length) - 1;
           if (maxIndex < 0) break;
-          setFocusedStopIndex((prev) => {
-            if (prev === null) return 0;
-            return Math.min(prev + 1, maxIndex);
-          });
+          onFocusChange(
+            focusedStopIndexRef.current === null
+              ? 0
+              : Math.min(focusedStopIndexRef.current + 1, maxIndex)
+          );
           break;
         }
 
         case "ArrowUp": {
           e.preventDefault();
-          if (nearbyStops.length === 0) break;
-          setFocusedStopIndex((prev) => {
-            if (prev === null || prev <= 0) return 0;
-            return prev - 1;
-          });
+          if (nearbyStopsCurrent.length === 0) break;
+          const current = focusedStopIndexRef.current;
+          if (current === null || current <= 0) {
+            onFocusChange(0);
+          } else {
+            onFocusChange(current - 1);
+          }
           break;
         }
 
         case "Enter": {
-          if (focusedStopIndex !== null && nearbyStops[focusedStopIndex]) {
-            handleSelectStop(nearbyStops[focusedStopIndex].stopId);
+          const focused = focusedStopIndexRef.current;
+          if (focused !== null && nearbyStopsCurrent[focused]) {
+            onSelectStop(nearbyStopsCurrent[focused].stopId);
           }
           break;
         }
@@ -226,9 +245,9 @@ export default function MapView({ positions, routes }: MapViewProps) {
   }, [
     selectedStopId,
     selectedVehicleId,
-    nearbyStops,
-    focusedStopIndex,
-    handleSelectStop,
+    nearbyStopsCurrent,
+    onSelectStop,
+    onFocusChange,
     handleClearSelection,
   ]);
 
@@ -282,21 +301,11 @@ export default function MapView({ positions, routes }: MapViewProps) {
         ))}
         <MapBindings
           mapRef={mapRef}
-          onCenterChange={handleCenterChange}
+          onCenterChange={onCenterChange}
           onZoomToLocation={handleZoomToLocation}
           userLocationEnabled={!!userLocation}
         />
       </MapContainer>
-
-      {/* Nearby stops overlay */}
-      <NearbyStopsPanel
-        stops={nearbyStopsQuery.data ?? []}
-        isLoading={nearbyStopsQuery.isLoading}
-        focusedIndex={focusedStopIndex}
-        selectedStopId={selectedStopId}
-        onSelectStop={handleSelectStop}
-        onFocusChange={setFocusedStopIndex}
-      />
     </div>
   );
 }
