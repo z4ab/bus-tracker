@@ -13,18 +13,15 @@ def _stop_time_to_timestamp(time_str: str, base_date: date) -> int:
     hours = int(parts[0])
     minutes = int(parts[1]) if len(parts) > 1 else 0
     seconds = int(parts[2]) if len(parts) > 2 else 0
-    dt = (
-        datetime(
-            base_date.year,
-            base_date.month,
-            base_date.day,
-            0,
-            0,
-            0,
-            tzinfo=timezone.utc,
-        )
-        + timedelta(hours=hours, minutes=minutes, seconds=seconds)
-    )
+    dt = datetime(
+        base_date.year,
+        base_date.month,
+        base_date.day,
+        0,
+        0,
+        0,
+        tzinfo=timezone.utc,
+    ) + timedelta(hours=hours, minutes=minutes, seconds=seconds)
     return int(dt.timestamp())
 
 
@@ -136,16 +133,8 @@ class DepartureQuery:
             else:
                 arr_str = stop_entry.get("arrival_time")
                 dep_str = stop_entry.get("departure_time")
-                arr = (
-                    _stop_time_to_timestamp(arr_str, today)
-                    if arr_str
-                    else None
-                )
-                dep = (
-                    _stop_time_to_timestamp(dep_str, today)
-                    if dep_str
-                    else None
-                )
+                arr = _stop_time_to_timestamp(arr_str, today) if arr_str else None
+                dep = _stop_time_to_timestamp(dep_str, today) if dep_str else None
                 deptype = "scheduled"
 
             ref = dep if dep is not None else arr
@@ -169,9 +158,11 @@ class DepartureQuery:
             )
 
         departures.sort(
-            key=lambda d: d["departure_time"]
-            if d["departure_time"] is not None
-            else (d["arrival_time"] or 0)
+            key=lambda d: (
+                d["departure_time"]
+                if d["departure_time"] is not None
+                else (d["arrival_time"] or 0)
+            )
         )
 
         return departures[:limit]
