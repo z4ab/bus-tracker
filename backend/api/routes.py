@@ -5,7 +5,7 @@ API routes for vehicles, routes, and health checks.
 import logging
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 import tomllib
 from fastapi import APIRouter, HTTPException
@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Read version from pyproject.toml at import time
 _PYPROJECT_PATH = Path(__file__).resolve().parent.parent / "pyproject.toml"
 try:
     _match = re.search(r'^version\s*=\s*"([^"]+)"', _PYPROJECT_PATH.read_text(), re.M)
@@ -25,7 +26,14 @@ except Exception:
     APP_VERSION = "unknown"
 
 
+# ---------------------------------------------------------------------------
+# Pydantic response models
+# ---------------------------------------------------------------------------
+
+
 class VehiclePositionItem(BaseModel):
+    """A single vehicle position from the GTFS-realtime feed."""
+
     model_config = ConfigDict(extra="allow")
 
     vehicle_id: Optional[str] = None
@@ -40,6 +48,8 @@ class VehiclePositionItem(BaseModel):
 
 
 class RouteItem(BaseModel):
+    """A single route from the GTFS static schedule."""
+
     model_config = ConfigDict(extra="allow")
 
     route_id: Optional[str] = None
@@ -50,6 +60,8 @@ class RouteItem(BaseModel):
 
 
 class StopItem(BaseModel):
+    """A single stop enriched with distance metadata."""
+
     model_config = ConfigDict(extra="allow")
 
     stop_id: Optional[str] = None
@@ -60,6 +72,8 @@ class StopItem(BaseModel):
 
 
 class ArrivalStopItem(BaseModel):
+    """A stop-time entry within a trip update, enriched with stop info."""
+
     model_config = ConfigDict(extra="allow")
 
     stop_id: Optional[str] = None
@@ -73,7 +87,30 @@ class ArrivalStopItem(BaseModel):
     stop_lon: Optional[float] = None
 
 
+class DepartureItem(BaseModel):
+    """A single departure for a stop, either predicted or scheduled."""
+
+    trip_id: str
+    route_id: str
+    route_short_name: Optional[str] = None
+    route_color: Optional[str] = None
+    stop_id: str
+    arrival_time: Optional[int] = None
+    departure_time: Optional[int] = None
+    type: str  # "predicted" or "scheduled"
+    minutes_away: Optional[int] = None
+
+
+class StopDeparturesResponse(BaseModel):
+    """Response with upcoming departures for a stop."""
+
+    stop_id: str
+    departures: List[DepartureItem]
+
+
 class HealthResponse(BaseModel):
+    """Response from the /health endpoint."""
+
     status: str
     version: str
     last_updated: Optional[str] = None
@@ -82,6 +119,8 @@ class HealthResponse(BaseModel):
 
 
 class VehiclesResponse(BaseModel):
+    """Response listing all active vehicle positions."""
+
     vehicles: List[VehiclePositionItem]
     last_updated: Optional[str] = None
     last_refresh_age_seconds: Optional[int] = None
@@ -90,39 +129,28 @@ class VehiclesResponse(BaseModel):
 
 
 class VehicleResponse(BaseModel):
+    """Response wrapping a single vehicle."""
+
     model_config = ConfigDict(extra="allow")
 
     vehicle: Optional[VehiclePositionItem] = None
 
 
 class RoutesResponse(BaseModel):
+    """Response listing all known routes."""
+
     routes: List[RouteItem]
 
 
 class NearbyStopsResponse(BaseModel):
+    """Response listing stops near a given coordinate."""
+
     stops: List[StopItem]
 
 
-class DepartureItem(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    trip_id: Optional[str] = None
-    route_id: Optional[str] = None
-    route_short_name: Optional[str] = None
-    route_color: Optional[str] = None
-    stop_id: Optional[str] = None
-    arrival_time: Optional[int] = None
-    departure_time: Optional[int] = None
-    type: Optional[str] = None
-    minutes_away: Optional[int] = None
-
-
-class StopDeparturesResponse(BaseModel):
-    stop_id: str
-    departures: List[DepartureItem]
-
-
 class VehicleArrivalsResponse(BaseModel):
+    """Response with upcoming stop arrivals for a vehicle's active trip."""
+
     model_config = ConfigDict(extra="allow")
 
     vehicle_id: str
@@ -133,6 +161,7 @@ class VehicleArrivalsResponse(BaseModel):
     stops: List[ArrivalStopItem]
 
 
+# Read version from pyproject.toml at import time
 _PYPROJECT_PATH = Path(__file__).resolve().parent.parent / "pyproject.toml"
 try:
     with open(_PYPROJECT_PATH, "rb") as f:
@@ -164,6 +193,7 @@ async def health() -> HealthResponse:
 
 @router.post("/api/refresh")
 async def refresh_cache() -> Dict[str, str]:
+    """Force an immediate refresh of the GTFS cache."""
     cache: Cache = get_cache()
     await cache.refresh_once()
     logger.info("Manual cache refresh triggered via /api/refresh")
@@ -211,22 +241,6 @@ async def list_routes() -> RoutesResponse:
 
 
 @router.get(
-    "/api/stops/{stop_id}/departures",
-    response_model=StopDeparturesResponse,
-    tags=["stops"],
-    summary="Get upcoming departures for a stop (predicted + scheduled)",
-)
-async def get_stop_departures(
-    stop_id: str, limit: int = 10, route_id: Optional[str] = None
-) -> StopDeparturesResponse:
-    cache = get_cache()
-    departures = await cache.get_stop_departures(
-        stop_id, limit=limit, route_id=route_id
-    )
-    return {"stop_id": stop_id, "departures": departures}
-
-
-@router.get(
     "/api/stops/nearby",
     response_model=NearbyStopsResponse,
     tags=["stops"],
@@ -238,6 +252,20 @@ async def nearby_stops(
     cache = get_cache()
     stops = await cache.get_nearby_stops(lat, lon, radius, limit)
     return {"stops": stops}
+
+
+@router.get(
+    "/api/stops/{stop_id}/departures",
+    response_model=StopDeparturesResponse,
+    tags=["stops"],
+    summary="Get upcoming departures for a stop",
+)
+async def get_stop_departures(
+    stop_id: str, limit: int = 10, route_id: Optional[str] = None
+) -> StopDeparturesResponse:
+    cache = get_cache()
+    departures = await cache.get_stop_departures(stop_id, limit=limit, route_id=route_id)
+    return {"stop_id": stop_id, "departures": departures}
 
 
 @router.get(
