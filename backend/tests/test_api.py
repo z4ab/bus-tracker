@@ -21,6 +21,7 @@ class FakeCache:
                 "bearing": 90.0,
                 "speed": 10.0,
                 "timestamp": 1710000000,
+                "transport_type": None,
             }
         ]
         self._routes = {
@@ -28,6 +29,8 @@ class FakeCache:
                 "route_id": "route-1",
                 "route_short_name": "1",
                 "route_color": "#123456",
+                "route_long_name": None,
+                "route_text_color": None,
             }
         }
         self._stops = {

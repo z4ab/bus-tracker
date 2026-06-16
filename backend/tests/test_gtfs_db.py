@@ -1,11 +1,10 @@
 """Tests for the SQLite static data cache layer (services/gtfs_db.py)."""
 
-import json
 import tempfile
 
 import pytest
 
-from services.gtfs_db import save_cached_static, load_cached_static, clear_cache
+from services.gtfs_db import clear_cache, load_cached_static, save_cached_static
 
 
 @pytest.fixture
@@ -40,7 +39,12 @@ SAMPLE_STOPS = {
 
 SAMPLE_STOP_TIMES = {
     "trip-1": [
-        {"stop_id": "A", "stop_sequence": 1, "arrival_time": "08:00:00", "departure_time": "08:05:00"},
+        {
+            "stop_id": "A",
+            "stop_sequence": 1,
+            "arrival_time": "08:00:00",
+            "departure_time": "08:05:00",
+        },
     ],
 }
 
@@ -83,7 +87,9 @@ async def test_save_and_load(db_path):
 @pytest.mark.asyncio
 async def test_load_missing_url(db_path):
     """Load a feed URL that was never saved. Assert result is None."""
-    result = await load_cached_static("https://example.com/never-saved.zip", db_path=db_path)
+    result = await load_cached_static(
+        "https://example.com/never-saved.zip", db_path=db_path
+    )
     assert result is None
 
 
@@ -152,8 +158,12 @@ async def test_save_without_optional_fields(db_path):
 async def test_clear_cache_all(db_path):
     """Save two URLs, call clear_cache() with no feed_url argument. Load both
     — both should return None."""
-    await save_cached_static("url1", {"r": {"id": "r"}}, {"s": {"id": "s"}}, db_path=db_path)
-    await save_cached_static("url2", {"r": {"id": "r"}}, {"s": {"id": "s"}}, db_path=db_path)
+    await save_cached_static(
+        "url1", {"r": {"id": "r"}}, {"s": {"id": "s"}}, db_path=db_path
+    )
+    await save_cached_static(
+        "url2", {"r": {"id": "r"}}, {"s": {"id": "s"}}, db_path=db_path
+    )
 
     cleared = await clear_cache(db_path=db_path)
     assert cleared is True
@@ -166,8 +176,12 @@ async def test_clear_cache_all(db_path):
 async def test_clear_cache_single(db_path):
     """Save two URLs, call clear_cache(feed_url="url1"). "url1" should return
     None, "url2" should still return data."""
-    await save_cached_static("url1", {"r": {"id": "r"}}, {"s": {"id": "s"}}, db_path=db_path)
-    await save_cached_static("url2", {"r": {"id": "r"}}, {"s": {"id": "s"}}, db_path=db_path)
+    await save_cached_static(
+        "url1", {"r": {"id": "r"}}, {"s": {"id": "s"}}, db_path=db_path
+    )
+    await save_cached_static(
+        "url2", {"r": {"id": "r"}}, {"s": {"id": "s"}}, db_path=db_path
+    )
 
     cleared = await clear_cache(feed_url="url1", db_path=db_path)
     assert cleared is True
@@ -180,7 +194,5 @@ async def test_clear_cache_single(db_path):
 async def test_load_nonexistent_db():
     """Call load_cached_static with a path in a directory that doesn't exist.
     The function should return None gracefully (catches exceptions internally)."""
-    result = await load_cached_static(
-        "url", db_path="/nonexistent/dir/cache.db"
-    )
+    result = await load_cached_static("url", db_path="/nonexistent/dir/cache.db")
     assert result is None
