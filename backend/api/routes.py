@@ -274,6 +274,21 @@ async def nearby_stops(
 
 
 @router.get(
+    "/api/stops/search",
+    response_model=NearbyStopsResponse,  # reuse — it's the same shape
+    tags=["stops"],
+    summary="Search stops by name",
+)
+async def search_stops(q: str, limit: int = 20) -> NearbyStopsResponse:
+    cache = get_cache()
+    stops = await cache.search_stops(q, limit=limit)
+    return JSONResponse(
+        content={"stops": stops},
+        headers={"Cache-Control": "public, max-age=60, stale-while-revalidate=300"},
+    )
+
+
+@router.get(
     "/api/stops/{stop_id}/departures",
     response_model=StopDeparturesResponse,
     tags=["stops"],
