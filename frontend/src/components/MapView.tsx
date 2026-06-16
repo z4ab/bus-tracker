@@ -289,6 +289,11 @@ export default function MapView({
             <SelectedVehicleMarker
               position={[selectedVehicle.lat, selectedVehicle.lon]}
               color={selectedVehicleRoute?.color}
+              shortName={selectedVehicleRoute?.shortName ?? selectedVehicle.routeShortName}
+              transportType={selectedVehicle.transportType}
+              heading={selectedVehicle.heading}
+              speed={selectedVehicle.speed}
+              updatedAt={selectedVehicle.updatedAt}
             />
           )}
         {validPositions.map((position) => (
