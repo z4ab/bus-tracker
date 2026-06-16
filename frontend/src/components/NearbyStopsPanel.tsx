@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { Stop } from "../api/types";
 import { useStopSearch } from "../hooks/useStopSearch";
+import { useStopDepartures } from "../hooks/useStopDepartures";
 import { SkeletonCard } from "./Skeleton";
+import StopDeparturesPanel from "./StopDeparturesPanel";
 
 interface NearbyStopsPanelProps {
   stops: Stop[];
@@ -75,6 +77,8 @@ export default function NearbyStopsPanel({
 }: NearbyStopsPanelProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  const departuresQuery = useStopDepartures(selectedStopId);
 
   useEffect(() => {
     itemRefs.current = itemRefs.current.slice(0, stops.length);
@@ -155,6 +159,13 @@ export default function NearbyStopsPanel({
             );
           })}
         </>
+      )}
+
+      {selectedStopId && (
+        <StopDeparturesPanel
+          departures={departuresQuery.data ?? []}
+          isLoading={departuresQuery.isLoading}
+        />
       )}
     </div>
   );
