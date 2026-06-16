@@ -9,6 +9,7 @@ from typing import Dict, List, Optional
 
 import tomllib
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
 from services.cache import Cache, get_cache
@@ -182,13 +183,16 @@ async def health() -> HealthResponse:
     last_updated = await cache.get_last_updated()
     cache_sizes = await cache.get_cache_sizes()
     feed_health = await cache.get_feed_health()
-    return {
-        "status": "ok",
-        "version": APP_VERSION,
-        "last_updated": last_updated,
-        "cache": cache_sizes,
-        "feeds": feed_health,
-    }
+    return JSONResponse(
+        content={
+            "status": "ok",
+            "version": APP_VERSION,
+            "last_updated": last_updated,
+            "cache": cache_sizes,
+            "feeds": feed_health,
+        },
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 @router.post("/api/refresh")
@@ -197,7 +201,10 @@ async def refresh_cache() -> Dict[str, str]:
     cache: Cache = get_cache()
     await cache.refresh_once()
     logger.info("Manual cache refresh triggered via /api/refresh")
-    return {"status": "ok"}
+    return JSONResponse(
+        content={"status": "ok"},
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 @router.get(
@@ -210,7 +217,10 @@ async def list_vehicles() -> VehiclesResponse:
     cache = get_cache()
     vehicles = await cache.get_vehicles()
     status = await cache.get_cache_status()
-    return {"vehicles": vehicles, **status}
+    return JSONResponse(
+        content={"vehicles": vehicles, **status},
+        headers={"Cache-Control": "public, max-age=5, stale-while-revalidate=15"},
+    )
 
 
 @router.get(
@@ -225,7 +235,10 @@ async def get_vehicle(vehicle_id: str) -> VehicleResponse:
     if not vehicle:
         logger.info("Vehicle not found: %s", vehicle_id)
         raise HTTPException(status_code=404, detail="Vehicle not found")
-    return {"vehicle": vehicle}
+    return JSONResponse(
+        content={"vehicle": vehicle},
+        headers={"Cache-Control": "public, max-age=5, stale-while-revalidate=15"},
+    )
 
 
 @router.get(
@@ -237,7 +250,10 @@ async def get_vehicle(vehicle_id: str) -> VehicleResponse:
 async def list_routes() -> RoutesResponse:
     cache = get_cache()
     routes = await cache.get_routes()
-    return {"routes": list(routes.values())}
+    return JSONResponse(
+        content={"routes": list(routes.values())},
+        headers={"Cache-Control": "public, max-age=60, stale-while-revalidate=300"},
+    )
 
 
 @router.get(
@@ -251,7 +267,10 @@ async def nearby_stops(
 ) -> NearbyStopsResponse:
     cache = get_cache()
     stops = await cache.get_nearby_stops(lat, lon, radius, limit)
-    return {"stops": stops}
+    return JSONResponse(
+        content={"stops": stops},
+        headers={"Cache-Control": "public, max-age=10, stale-while-revalidate=30"},
+    )
 
 
 @router.get(
@@ -267,7 +286,10 @@ async def get_stop_departures(
     departures = await cache.get_stop_departures(
         stop_id, limit=limit, route_id=route_id
     )
-    return {"stop_id": stop_id, "departures": departures}
+    return JSONResponse(
+        content={"stop_id": stop_id, "departures": departures},
+        headers={"Cache-Control": "public, max-age=10, stale-while-revalidate=30"},
+    )
 
 
 @router.get(
@@ -291,19 +313,25 @@ async def get_vehicle_arrivals(vehicle_id: str) -> VehicleArrivalsResponse:
     details = await cache.get_trip_details(trip_id)
 
     if not details:
-        return {
+        return JSONResponse(
+            content={
+                "vehicle_id": vehicle_id,
+                "trip_id": trip_id,
+                "route_id": vehicle.get("route_id"),
+                "updated_at": updated_at,
+                "stops": [],
+            },
+            headers={"Cache-Control": "public, max-age=10, stale-while-revalidate=30"},
+        )
+
+    return JSONResponse(
+        content={
             "vehicle_id": vehicle_id,
             "trip_id": trip_id,
-            "route_id": vehicle.get("route_id"),
+            "route_id": details.get("route_id") or vehicle.get("route_id"),
+            "feed_timestamp": details.get("timestamp"),
             "updated_at": updated_at,
-            "stops": [],
-        }
-
-    return {
-        "vehicle_id": vehicle_id,
-        "trip_id": trip_id,
-        "route_id": details.get("route_id") or vehicle.get("route_id"),
-        "feed_timestamp": details.get("timestamp"),
-        "updated_at": updated_at,
-        "stops": details.get("stop_time_updates", []),
-    }
+            "stops": details.get("stop_time_updates", []),
+        },
+        headers={"Cache-Control": "public, max-age=10, stale-while-revalidate=30"},
+    )
