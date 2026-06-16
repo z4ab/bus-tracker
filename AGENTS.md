@@ -229,3 +229,59 @@ npm run format             # auto-format with Prettier
 Frontend uses Prettier (printWidth 100, singleQuote off, trailingComma es5) and
 ESLint with TypeScript + React plugins.
 Backend uses Ruff (select E/F/I, ignore E501) and Black (line-length 88).
+
+## Issue Development Workflow
+
+All feature work MUST follow this sequential, merge-based workflow to keep conflicts out:
+
+### 1. Priority / Order
+
+Issues are implemented ONE AT A TIME in dependency order. Always check the issue
+body's "Dependencies" section before starting. Issues without dependencies come
+first.
+
+### 2. Branch & PR
+
+- Create a branch from `main` using the issue number: `feat/issue-<N>-<short-desc>`.
+- Make well-scoped commits with Conventional Commit messages.
+- Push the branch and open a PR against `main`.
+- Use the PR title format: `<type>: <short description>` and include `Closes #<N>`
+  in the body.
+- Set `create-pull-request` with `draft: false`.
+
+### 3. Merge
+
+- Merge the PR using **merge commit** (NOT squash, NOT rebase).
+- This keeps each issue's commits visible and avoids conflicts with
+  in-progress branches.
+
+### 4. After Merge
+
+- Delete the branch.
+- Pull `main` locally to get the latest commits.
+- Proceed to the next issue.
+
+### 5. Validation Per Issue
+
+After implementing but before opening the PR, run:
+
+- Backend changes:
+  ```bash
+  cd backend
+  ruff check .
+  poetry run pytest .
+  ```
+- Frontend changes:
+  ```bash
+  cd frontend
+  npm run lint
+  npm run format:check
+  npm run build
+  npm run test
+  ```
+- Root-level formatting (README/docs):
+  ```bash
+  cd frontend && npm run format
+  ```
+
+If validation fails, fix before opening the PR.
