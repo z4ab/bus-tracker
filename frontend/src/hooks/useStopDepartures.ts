@@ -32,7 +32,7 @@ export interface Departure {
   minutesAway?: number;
 }
 
-const toDeparture = (raw: DepartureApi): Departure => ({
+export const toDeparture = (raw: DepartureApi): Departure => ({
   tripId: raw.trip_id,
   routeId: raw.route_id,
   routeShortName: raw.route_short_name ?? undefined,

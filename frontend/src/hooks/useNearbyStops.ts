@@ -16,7 +16,7 @@ type NearbyStopsResponse = {
   stops: StopApi[];
 };
 
-const toStop = (raw: StopApi): Stop => ({
+export const toStop = (raw: StopApi): Stop => ({
   stopId: raw.stop_id,
   stopName: raw.stop_name ?? undefined,
   stopLat: raw.stop_lat ?? 0,
