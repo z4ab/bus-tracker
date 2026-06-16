@@ -1,6 +1,7 @@
-import { useState } from "react";
-import type { Route, VehiclePosition } from "../api/types";
+import { useMemo, useState } from "react";
+import type { Route, VehicleArrivalStop, VehiclePosition } from "../api/types";
 import RouteListPanel from "./RouteListPanel";
+import TripTimelinePanel from "./TripTimelinePanel";
 
 interface SidebarProps {
   routes: Route[];
@@ -11,6 +12,9 @@ interface SidebarProps {
   isOpen: boolean;
   onToggle: () => void;
   children?: React.ReactNode;
+  selectedVehicleId: string | null;
+  arrivals: VehicleArrivalStop[];
+  arrivalsLoading: boolean;
 }
 
 type Tab = "stops" | "routes";
@@ -24,8 +28,18 @@ export default function Sidebar({
   isOpen,
   onToggle,
   children,
+  selectedVehicleId,
+  arrivals,
+  arrivalsLoading,
 }: SidebarProps) {
   const [activeTab, setActiveTab] = useState<Tab>("stops");
+
+  const selectedVehicleRoute = useMemo(() => {
+    if (!selectedVehicleId) return undefined;
+    const vehicle = positions.find((p) => p.id === selectedVehicleId);
+    if (!vehicle?.routeId) return undefined;
+    return routes.find((r) => r.id === vehicle.routeId);
+  }, [selectedVehicleId, positions, routes]);
 
   return (
     <>
@@ -106,7 +120,15 @@ export default function Sidebar({
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
           {activeTab === "stops" ? (
-            loading ? (
+            selectedVehicleId ? (
+              <TripTimelinePanel
+                stops={arrivals}
+                isLoading={arrivalsLoading}
+                routeShortName={selectedVehicleRoute?.shortName}
+                routeColor={selectedVehicleRoute?.color}
+                vehicleId={selectedVehicleId}
+              />
+            ) : loading ? (
               <div className="px-4 py-3 text-sm text-gray-500">Loading…</div>
             ) : (
               children
