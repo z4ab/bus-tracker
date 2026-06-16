@@ -58,6 +58,16 @@ export interface Stop {
   transportType?: string;
 }
 
+export interface Alert {
+  alertId?: string;
+  headerText?: string;
+  descriptionText?: string;
+  routeIds: string[];
+  cause?: string;
+  effect?: string;
+  activePeriods: { start?: number; end?: number }[];
+}
+
 export interface CacheStatus {
   lastUpdated: string;
   lastRefreshAgeSeconds: number | null;

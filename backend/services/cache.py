@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from core.config import Settings, load_settings
-from services import gtfs_realtime, gtfs_static
+from services import gtfs_alerts, gtfs_realtime, gtfs_static
 from services.departure_query import DepartureQuery
 from services.geo_query import GeoQuery
 
@@ -36,6 +36,7 @@ class Cache:
         self._task: Optional[asyncio.Task] = None
         self._geo = GeoQuery()
         self._departure = DepartureQuery()
+        self._alerts: List[Dict[str, Any]] = []
 
     def _compute_bearing(
         self,
@@ -186,6 +187,17 @@ class Cache:
                 logger.exception("Failed to fetch LRT trip updates")
                 any_failure = True
 
+        if self._settings.GRT_ALERTS_URL:
+            try:
+                self._alerts = await gtfs_alerts.fetch_alerts(
+                    self._settings.GRT_ALERTS_URL,
+                    allow_weak_tls=self._settings.GRT_ALLOW_WEAK_TLS,
+                )
+                self._feed_health["grt_alerts"] = "ok"
+            except Exception:
+                logger.exception("Failed to fetch GTFS-realtime alerts")
+                self._feed_health["grt_alerts"] = "error"
+
         if not self._routes or not self._stops:
             try:
                 bundle = await gtfs_static.fetch_static_bundle_cached(
@@ -316,6 +328,11 @@ class Cache:
             stops_snapshot = {sid: dict(info) for sid, info in self._stops.items()}
         return self._geo.nearby_stops(stops_snapshot, lat, lon, radius_m, limit)
 
+    async def get_alerts(self) -> List[Dict[str, Any]]:
+        await self.ensure_fresh()
+        async with self._lock:
+            return [dict(alert) for alert in self._alerts]
+
     async def get_trip_updates(self) -> List[Dict[str, Any]]:
         await self.ensure_fresh()
         async with self._lock:
@@ -369,6 +386,7 @@ class Cache:
                 "stop_times": len(self._stop_times),
                 "trip_routes": len(self._trip_routes),
                 "trip_updates": len(self._trip_updates),
+                "alerts": len(self._alerts),
             }
 
     async def get_feed_health(self) -> Dict[str, str]:

@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Route, VehicleArrivalStop, VehiclePosition } from "../api/types";
+import { useAlerts } from "../hooks/useAlerts";
+import AlertsPanel from "./AlertsPanel";
 import RouteListPanel from "./RouteListPanel";
 import TripTimelinePanel from "./TripTimelinePanel";
 
@@ -17,7 +19,7 @@ interface SidebarProps {
   arrivalsLoading: boolean;
 }
 
-type Tab = "stops" | "routes";
+type Tab = "stops" | "routes" | "alerts";
 
 export default function Sidebar({
   routes,
@@ -32,6 +34,9 @@ export default function Sidebar({
   arrivals,
   arrivalsLoading,
 }: SidebarProps) {
+  const { data: alerts, isLoading: alertsLoading } = useAlerts();
+  const activeAlerts = alerts ?? [];
+
   const [activeTab, setActiveTab] = useState<Tab>("stops");
 
   const selectedVehicleRoute = useMemo(() => {
@@ -115,6 +120,21 @@ export default function Sidebar({
           >
             Routes
           </button>
+          <button
+            onClick={() => setActiveTab("alerts")}
+            className={`flex-1 px-4 py-2 text-sm font-medium transition-colors relative ${
+              activeTab === "alerts"
+                ? "text-blue-600 border-b-2 border-blue-500"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Alerts
+            {activeAlerts.length > 0 && (
+              <span className="absolute -top-0.5 right-1 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                {activeAlerts.length}
+              </span>
+            )}
+          </button>
         </div>
 
         {/* Content */}
@@ -133,12 +153,14 @@ export default function Sidebar({
             ) : (
               children
             )
-          ) : (
+          ) : activeTab === "routes" ? (
             <RouteListPanel
               routes={routes}
               selectedRouteId={selectedRouteId}
               onSelectRoute={onSelectRoute}
             />
+          ) : (
+            <AlertsPanel alerts={activeAlerts} isLoading={alertsLoading} />
           )}
         </div>
 
