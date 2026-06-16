@@ -23,6 +23,7 @@ export interface VehiclePosition {
   updatedAt?: string;
   heading?: number;
   transportType?: "bus" | "lrt";
+  speed?: number;
 }
 
 export interface VehicleArrivalStop {

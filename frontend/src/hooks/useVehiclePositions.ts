@@ -28,6 +28,7 @@ const toVehiclePosition = (raw: VehiclePositionApi): VehiclePosition => ({
   lon: raw.longitude ?? NaN,
   routeId: raw.route_id ?? undefined,
   heading: raw.bearing ?? undefined,
+  speed: raw.speed ?? undefined,
   updatedAt: raw.timestamp ? new Date(raw.timestamp * 1000).toISOString() : undefined,
   transportType: raw.transport_type === "lrt" ? "lrt" : "bus",
 });
