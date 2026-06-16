@@ -293,6 +293,21 @@ class Cache:
         async with self._lock:
             return {stop_id: dict(info) for stop_id, info in self._stops.items()}
 
+    async def search_stops(self, query: str, limit: int = 20) -> List[Dict[str, Any]]:
+        await self.ensure_fresh()
+        async with self._lock:
+            results: List[Dict[str, Any]] = []
+            q = query.lower().strip()
+            for stop_id, info in self._stops.items():
+                name = (info.get("stop_name") or "").lower()
+                if q in name:
+                    entry = dict(info)
+                    entry["stop_id"] = stop_id
+                    entry["distance_m"] = None  # no reference point
+                    results.append(entry)
+            results.sort(key=lambda s: s.get("stop_name") or "")
+            return results[:limit]
+
     async def get_nearby_stops(
         self, lat: float, lon: float, radius_m: float = 500.0, limit: int = 20
     ) -> List[Dict[str, Any]]:
