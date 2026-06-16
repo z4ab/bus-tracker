@@ -63,15 +63,17 @@ def parse_alerts(feed_message: gtfs_realtime_pb2.FeedMessage) -> List[Dict[str, 
             if entry:
                 active_periods.append(entry)
 
-        alerts.append({
-            "alert_id": alert_id,
-            "header_text": header,
-            "description_text": description,
-            "route_ids": route_ids,
-            "cause": cause,
-            "effect": effect,
-            "active_periods": active_periods,
-        })
+        alerts.append(
+            {
+                "alert_id": alert_id,
+                "header_text": header,
+                "description_text": description,
+                "route_ids": route_ids,
+                "cause": cause,
+                "effect": effect,
+                "active_periods": active_periods,
+            }
+        )
 
     return alerts
 
