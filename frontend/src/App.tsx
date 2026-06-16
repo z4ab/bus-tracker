@@ -6,6 +6,7 @@ import NearbyStopsPanel from "./components/NearbyStopsPanel";
 import Sidebar from "./components/Sidebar";
 import { useNearbyStops } from "./hooks/useNearbyStops";
 import { useRoutes } from "./hooks/useRoutes";
+import { useVehicleArrivals } from "./hooks/useVehicleArrivals";
 import { useVehiclePositions } from "./hooks/useVehiclePositions";
 import type { CacheStatus } from "./api/types";
 
@@ -33,18 +34,27 @@ export default function App() {
   const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
   const [focusedStopIndex, setFocusedStopIndex] = useState<number | null>(null);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
 
   const handleToggleSidebar = useCallback(() => {
     setSidebarOpen((prev) => !prev);
   }, []);
 
   const nearbyStopsQuery = useNearbyStops(mapCenter);
+  const arrivalsQuery = useVehicleArrivals(selectedVehicleId);
 
   const handleSelectStop = useCallback((stopId: string) => {
     setSelectedStopId((prev) => (prev === stopId ? null : stopId));
   }, []);
 
-  const handleClearStopSelection = useCallback(() => {
+  const handleSelectVehicle = useCallback((vehicleId: string) => {
+    setSelectedVehicleId(vehicleId);
+    setSelectedStopId(null);
+    setFocusedStopIndex(null);
+  }, []);
+
+  const handleClearVehicleSelection = useCallback(() => {
+    setSelectedVehicleId(null);
     setSelectedStopId(null);
     setFocusedStopIndex(null);
   }, []);
@@ -84,6 +94,9 @@ export default function App() {
         selectedRouteId={selectedRouteId}
         isOpen={sidebarOpen}
         onToggle={handleToggleSidebar}
+        selectedVehicleId={selectedVehicleId}
+        arrivals={arrivalsQuery.data?.stops ?? []}
+        arrivalsLoading={arrivalsQuery.isLoading}
       >
         <NearbyStopsPanel
           stops={nearbyStopsQuery.data ?? []}
@@ -187,7 +200,11 @@ export default function App() {
               selectedStopId={selectedStopId}
               onSelectStop={handleSelectStop}
               onFocusChange={setFocusedStopIndex}
-              onClearStopSelection={handleClearStopSelection}
+              selectedVehicleId={selectedVehicleId}
+              onSelectVehicle={handleSelectVehicle}
+              onClearVehicleSelection={handleClearVehicleSelection}
+              arrivals={arrivalsQuery.data?.stops ?? []}
+              arrivalsLoading={arrivalsQuery.isLoading}
             />
           </>
         )}

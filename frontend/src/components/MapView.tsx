@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, Polyline, TileLayer } from "react-leaflet";
 import L from "leaflet";
-import type { Route, Stop, VehiclePosition } from "../api/types";
-import { useVehicleArrivals } from "../hooks/useVehicleArrivals";
+import type { Route, Stop, VehicleArrivalStop, VehiclePosition } from "../api/types";
 import MapBindings from "./MapBindings";
 import SelectedVehicleMarker from "./SelectedVehicleMarker";
 import VehicleMarker from "./VehicleMarker";
@@ -24,8 +23,11 @@ interface MapViewProps {
   selectedStopId: string | null;
   onSelectStop: (stopId: string) => void;
   onFocusChange: (index: number | null) => void;
-  /** Clear stop-focused state (but not route selection) */
-  onClearStopSelection: () => void;
+  selectedVehicleId: string | null;
+  onSelectVehicle: (vehicleId: string) => void;
+  onClearVehicleSelection: () => void;
+  arrivals: VehicleArrivalStop[];
+  arrivalsLoading: boolean;
 }
 
 const defaultCenter: [number, number] = [43.4516, -80.4925];
@@ -49,13 +51,14 @@ export default function MapView({
   selectedStopId,
   onSelectStop,
   onFocusChange,
-  onClearStopSelection,
+  selectedVehicleId,
+  onSelectVehicle,
+  onClearVehicleSelection,
+  arrivals,
 }: MapViewProps) {
   const routeIndex = useMemo(() => buildRouteIndex(routes), [routes]);
-  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const arrivalsQuery = useVehicleArrivals(selectedVehicleId);
 
   // Set initial map center from geolocation (runs once on mount)
   useEffect(() => {
@@ -90,9 +93,7 @@ export default function MapView({
       if (routeId) {
         onSelectRoute(routeId);
       }
-      setSelectedVehicleId(vehicleId);
-      // Clear stop selection when selecting a vehicle
-      onClearStopSelection();
+      onSelectVehicle(vehicleId);
 
       // Fly to the selected vehicle
       const vehicle = positions.find((p) => p.id === vehicleId);
@@ -105,14 +106,13 @@ export default function MapView({
         mapRef.current.flyTo([vehicle.lat, vehicle.lon], 14, { duration: 1 });
       }
     },
-    [positions, onSelectRoute, onClearStopSelection]
+    [positions, onSelectRoute, onSelectVehicle]
   );
 
   const handleClearSelection = useCallback(() => {
     onSelectRoute(null);
-    setSelectedVehicleId(null);
-    onClearStopSelection();
-  }, [onSelectRoute, onClearStopSelection]);
+    onClearVehicleSelection();
+  }, [onSelectRoute, onClearVehicleSelection]);
 
   const selectedRoute = selectedRouteId ? routeIndex.get(selectedRouteId) : undefined;
   const selectedRoutePoints = useMemo(() => {
@@ -136,11 +136,8 @@ export default function MapView({
     : undefined;
 
   const upcomingStops = useMemo(() => {
-    if (!arrivalsQuery.data) {
-      return [];
-    }
     const nowSeconds = Date.now() / 1000;
-    return arrivalsQuery.data.stops
+    return arrivals
       .map((stop) => {
         const predictedTime = stop.arrivalTime ?? stop.departureTime ?? null;
         if (!predictedTime) {
@@ -157,7 +154,7 @@ export default function MapView({
       .filter((stop): stop is Exclude<typeof stop, null> => Boolean(stop))
       .sort((a, b) => a.predictedTime - b.predictedTime)
       .slice(0, 10);
-  }, [arrivalsQuery.data]);
+  }, [arrivals]);
 
   const upcomingStopsWithCoords = useMemo(() => {
     return upcomingStops.filter(
