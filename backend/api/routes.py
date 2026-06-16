@@ -149,6 +149,26 @@ class NearbyStopsResponse(BaseModel):
     stops: List[StopItem]
 
 
+class AlertItem(BaseModel):
+    """A single service alert."""
+
+    model_config = ConfigDict(extra="allow")
+
+    alert_id: Optional[str] = None
+    header_text: Optional[str] = None
+    description_text: Optional[str] = None
+    route_ids: List[str] = []
+    cause: Optional[str] = None
+    effect: Optional[str] = None
+    active_periods: List[Dict[str, int]] = []
+
+
+class AlertsResponse(BaseModel):
+    """Response with active service alerts."""
+
+    alerts: List[AlertItem]
+
+
 class VehicleArrivalsResponse(BaseModel):
     """Response with upcoming stop arrivals for a vehicle's active trip."""
 
@@ -285,6 +305,21 @@ async def search_stops(q: str, limit: int = 20) -> NearbyStopsResponse:
     return JSONResponse(
         content={"stops": stops},
         headers={"Cache-Control": "public, max-age=60, stale-while-revalidate=300"},
+    )
+
+
+@router.get(
+    "/api/alerts",
+    response_model=AlertsResponse,
+    tags=["alerts"],
+    summary="List active service alerts",
+)
+async def list_alerts() -> AlertsResponse:
+    cache = get_cache()
+    alerts = await cache.get_alerts()
+    return JSONResponse(
+        content={"alerts": alerts},
+        headers={"Cache-Control": "public, max-age=15, stale-while-revalidate=30"},
     )
 
 
