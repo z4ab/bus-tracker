@@ -28,10 +28,15 @@ export default function App() {
   const routesQuery = useRoutes();
   const positionsQuery = useVehiclePositions();
 
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
   const [focusedStopIndex, setFocusedStopIndex] = useState<number | null>(null);
+
+  const handleToggleSidebar = useCallback(() => {
+    setSidebarOpen((prev) => !prev);
+  }, []);
 
   const nearbyStopsQuery = useNearbyStops(mapCenter);
 
@@ -77,6 +82,8 @@ export default function App() {
         loading={loading}
         onSelectRoute={setSelectedRouteId}
         selectedRouteId={selectedRouteId}
+        isOpen={sidebarOpen}
+        onToggle={handleToggleSidebar}
       >
         <NearbyStopsPanel
           stops={nearbyStopsQuery.data ?? []}
@@ -89,7 +96,7 @@ export default function App() {
       </Sidebar>
 
       {/* Main Content */}
-      <div className="flex-1 relative min-w-0">
+      <div className="flex-1 relative min-w-0 lg:ml-72">
         {/* Refresh button */}
         <button
           onClick={handleRefresh}
