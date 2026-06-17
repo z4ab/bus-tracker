@@ -39,6 +39,16 @@ export default function Sidebar({
 
   const [activeTab, setActiveTab] = useState<Tab>("stops");
 
+  const vehicleCountsByRoute = useMemo(() => {
+    const counts: Record<string, number> = {};
+    positions.forEach((p) => {
+      if (p.routeId) {
+        counts[p.routeId] = (counts[p.routeId] ?? 0) + 1;
+      }
+    });
+    return counts;
+  }, [positions]);
+
   const selectedVehicleRoute = useMemo(() => {
     if (!selectedVehicleId) return undefined;
     const vehicle = positions.find((p) => p.id === selectedVehicleId);
@@ -158,6 +168,7 @@ export default function Sidebar({
               routes={routes}
               selectedRouteId={selectedRouteId}
               onSelectRoute={onSelectRoute}
+              vehicleCountsByRoute={vehicleCountsByRoute}
             />
           ) : (
             <AlertsPanel alerts={activeAlerts} isLoading={alertsLoading} />

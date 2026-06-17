@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiPost } from "./api/client";
 import MapView from "./components/MapView";
@@ -30,6 +30,7 @@ export default function App() {
   const positionsQuery = useVehiclePositions();
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [transportFilter, setTransportFilter] = useState<"all" | "bus" | "lrt">("all");
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
@@ -73,22 +74,31 @@ export default function App() {
   }, [queryClient]);
 
   const routes = routesQuery.data ?? [];
-  const positions = positionsQuery.data?.positions ?? [];
   const cacheStatus: CacheStatus | undefined = positionsQuery.data?.cacheStatus;
+
+  const filteredPositions = useMemo(() => {
+    const allPositions = positionsQuery.data?.positions ?? [];
+    if (transportFilter === "all") return allPositions;
+    return allPositions.filter((p) => p.transportType === transportFilter);
+  }, [positionsQuery.data, transportFilter]);
 
   const loading = routesQuery.isLoading || positionsQuery.isLoading;
   const error = routesQuery.error ?? positionsQuery.error;
   const stale = !loading && cacheStatus?.stale;
-  const hasVehicles = positions.length > 0;
+  const hasVehicles = filteredPositions.length > 0;
   const hasRoutes = routes.length > 0;
   const showNoVehiclesMessage = !loading && !error && hasRoutes && !hasVehicles && !stale;
+  const noVehiclesMessage =
+    transportFilter === "lrt"
+      ? "No LRT vehicles currently active."
+      : "No buses currently running on the tracked routes.";
 
   return (
     <div className="flex h-screen">
       {/* Sidebar */}
       <Sidebar
         routes={routes}
-        positions={positions}
+        positions={filteredPositions}
         loading={loading}
         onSelectRoute={setSelectedRouteId}
         selectedRouteId={selectedRouteId}
@@ -110,6 +120,23 @@ export default function App() {
 
       {/* Main Content */}
       <div className="flex-1 relative min-w-0 lg:ml-72">
+        {/* Transport filter toggle */}
+        <div className="absolute top-3 left-3 z-20 flex rounded-full bg-white/80 shadow">
+          {(["all", "bus", "lrt"] as const).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setTransportFilter(mode)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
+                transportFilter === mode
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              {mode === "all" ? "All" : mode === "bus" ? "Buses" : "LRT"}
+            </button>
+          ))}
+        </div>
+
         {/* Refresh button */}
         <button
           onClick={handleRefresh}
@@ -183,13 +210,13 @@ export default function App() {
                         d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                       />
                     </svg>
-                    <span>No buses currently running on the tracked routes.</span>
+                    <span>{noVehiclesMessage}</span>
                   </p>
                 </div>
               </div>
             )}
             <MapView
-              positions={positions}
+              positions={filteredPositions}
               routes={routes}
               selectedRouteId={selectedRouteId}
               onSelectRoute={setSelectedRouteId}

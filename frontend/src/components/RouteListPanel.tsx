@@ -5,12 +5,14 @@ interface RouteListPanelProps {
   routes: Route[];
   selectedRouteId: string | null;
   onSelectRoute: (routeId: string | null) => void;
+  vehicleCountsByRoute: Record<string, number>;
 }
 
 export default function RouteListPanel({
   routes,
   selectedRouteId,
   onSelectRoute,
+  vehicleCountsByRoute,
 }: RouteListPanelProps) {
   const [search, setSearch] = useState("");
 
@@ -65,6 +67,9 @@ export default function RouteListPanel({
                   {route.longName && (
                     <span className="text-gray-500 truncate">{route.longName}</span>
                   )}
+                  <span className="ml-auto text-xs text-gray-400 tabular-nums">
+                    {vehicleCountsByRoute[route.id] ?? 0}
+                  </span>
                 </button>
               );
             })}
