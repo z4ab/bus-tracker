@@ -22,9 +22,7 @@ const toVehicleHistoryPoint = (raw: VehicleHistoryPointApi): VehicleHistoryPoint
 });
 
 const fetchVehicleHistory = async (vehicleId: string) => {
-  const response = await apiGet<VehicleHistoryResponse>(
-    `/api/vehicles/${vehicleId}/history`
-  );
+  const response = await apiGet<VehicleHistoryResponse>(`/api/vehicles/${vehicleId}/history`);
   return response.positions
     .map(toVehicleHistoryPoint)
     .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon));
