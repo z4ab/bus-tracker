@@ -6,6 +6,7 @@ import { buildStopMarkerHtml } from "./StopMarker";
 import { useStopDepartures } from "../hooks/useStopDepartures";
 import StopDeparturesPanel from "./StopDeparturesPanel";
 import MapBindings from "./MapBindings";
+import { useVehicleHistory } from "../hooks/useVehicleHistory";
 import SelectedVehicleMarker from "./SelectedVehicleMarker";
 import VehicleMarker from "./VehicleMarker";
 import UserMarker from "./UserMarker";
@@ -181,6 +182,8 @@ export default function MapView({
     ? routeIndex.get(selectedVehicle.routeId)
     : undefined;
 
+  const { data: historyPoints = [] } = useVehicleHistory(selectedVehicleId);
+
   const upcomingStops = useMemo(() => {
     const nowSeconds = Date.now() / 1000;
     return arrivals
@@ -325,6 +328,17 @@ export default function MapView({
               color: selectedRoute?.color ?? "#1976d2",
               weight: 6,
               opacity: 0.9,
+            }}
+          />
+        )}
+        {selectedVehicleId && historyPoints.length > 1 && (
+          <Polyline
+            positions={historyPoints.map((p) => [p.lat, p.lon] as [number, number])}
+            pathOptions={{
+              color: selectedVehicleRoute?.color ?? "#1976d2",
+              weight: 4,
+              opacity: 0.4,
+              dashArray: "5, 5",
             }}
           />
         )}
