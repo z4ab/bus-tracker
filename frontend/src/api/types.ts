@@ -68,6 +68,13 @@ export interface Alert {
   activePeriods: { start?: number; end?: number }[];
 }
 
+export interface VehicleHistoryPoint {
+  lat: number;
+  lon: number;
+  bearing?: number;
+  timestamp?: number;
+}
+
 export interface CacheStatus {
   lastUpdated: string;
   lastRefreshAgeSeconds: number | null;

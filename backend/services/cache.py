@@ -37,6 +37,7 @@ class Cache:
         self._geo = GeoQuery()
         self._departure = DepartureQuery()
         self._alerts: List[Dict[str, Any]] = []
+        self._vehicle_history: dict[str, list[dict]] = {}
 
     def _compute_bearing(
         self,
@@ -255,6 +256,24 @@ class Cache:
                 self._refresh_failed = True
                 self._refresh_error = "One or more GTFS feeds failed to refresh"
             else:
+                # Append current positions to vehicle history
+                now_ts = int(now.timestamp())
+                for vehicle in self._vehicles:
+                    vid = vehicle.get("vehicle_id")
+                    if not vid:
+                        continue
+                    entry = {
+                        "latitude": vehicle.get("latitude"),
+                        "longitude": vehicle.get("longitude"),
+                        "bearing": vehicle.get("bearing"),
+                        "timestamp": now_ts,
+                    }
+                    history = self._vehicle_history.setdefault(vid, [])
+                    history.append(entry)
+                    # Keep max 60 entries per vehicle
+                    if len(history) > 60:
+                        history[:] = history[-60:]
+
                 self._refresh_failed = False
                 self._refresh_error = None
 
@@ -294,6 +313,11 @@ class Cache:
                 if vehicle.get("vehicle_id") == vehicle_id:
                     return dict(vehicle)
         return None
+
+    async def get_vehicle_history(self, vehicle_id: str) -> List[Dict[str, Any]]:
+        await self.ensure_fresh()
+        async with self._lock:
+            return list(self._vehicle_history.get(vehicle_id, []))
 
     async def get_routes(self) -> Dict[str, Dict[str, Any]]:
         await self.ensure_fresh()
