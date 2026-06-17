@@ -13,7 +13,7 @@ vi.mock("react-leaflet", () => ({
   ),
   TileLayer: () => <div data-testid="tile-layer" />,
   Polyline: () => <div data-testid="polyline" />,
-  useMap: () => ({}),
+  useMap: () => ({ on: vi.fn(), off: vi.fn() }),
 }));
 
 // Also mock the sub-components that depend on Leaflet
