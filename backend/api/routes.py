@@ -169,6 +169,24 @@ class AlertsResponse(BaseModel):
     alerts: List[AlertItem]
 
 
+class VehicleHistoryPositionItem(BaseModel):
+    """A single position entry in a vehicle's history trail."""
+
+    model_config = ConfigDict(extra="allow")
+
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    bearing: Optional[float] = None
+    timestamp: Optional[int] = None
+
+
+class VehicleHistoryResponse(BaseModel):
+    """Response with historical positions for a vehicle."""
+
+    vehicle_id: str
+    positions: List[VehicleHistoryPositionItem]
+
+
 class VehicleArrivalsResponse(BaseModel):
     """Response with upcoming stop arrivals for a vehicle's active trip."""
 
@@ -339,6 +357,21 @@ async def get_stop_departures(
     return JSONResponse(
         content={"stop_id": stop_id, "departures": departures},
         headers={"Cache-Control": "public, max-age=10, stale-while-revalidate=30"},
+    )
+
+
+@router.get(
+    "/api/vehicles/{vehicle_id}/history",
+    response_model=VehicleHistoryResponse,
+    tags=["vehicles"],
+    summary="Get position history for a vehicle",
+)
+async def get_vehicle_history(vehicle_id: str) -> VehicleHistoryResponse:
+    cache = get_cache()
+    positions = await cache.get_vehicle_history(vehicle_id)
+    return JSONResponse(
+        content={"vehicle_id": vehicle_id, "positions": positions},
+        headers={"Cache-Control": "public, max-age=5, stale-while-revalidate=15"},
     )
 
 
