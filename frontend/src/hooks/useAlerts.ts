@@ -16,7 +16,7 @@ type AlertsResponse = {
   alerts: AlertApi[];
 };
 
-const toAlert = (raw: AlertApi): Alert => ({
+export const toAlert = (raw: AlertApi): Alert => ({
   alertId: raw.alert_id ?? undefined,
   headerText: raw.header_text ?? undefined,
   descriptionText: raw.description_text ?? undefined,

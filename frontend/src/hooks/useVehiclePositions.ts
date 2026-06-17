@@ -22,7 +22,7 @@ type VehiclePositionsResponse = {
   refresh_error?: string | null;
 };
 
-const toVehiclePosition = (raw: VehiclePositionApi): VehiclePosition => ({
+export const toVehiclePosition = (raw: VehiclePositionApi): VehiclePosition => ({
   id: raw.vehicle_id ?? "unknown",
   lat: raw.latitude ?? NaN,
   lon: raw.longitude ?? NaN,
@@ -33,7 +33,7 @@ const toVehiclePosition = (raw: VehiclePositionApi): VehiclePosition => ({
   transportType: raw.transport_type === "lrt" ? "lrt" : "bus",
 });
 
-const toCacheStatus = (raw: VehiclePositionsResponse): CacheStatus => ({
+export const toCacheStatus = (raw: VehiclePositionsResponse): CacheStatus => ({
   lastUpdated: raw.last_updated ?? "",
   lastRefreshAgeSeconds: raw.last_refresh_age_seconds ?? null,
   stale: raw.stale ?? false,

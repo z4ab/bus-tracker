@@ -13,7 +13,7 @@ import type { CacheStatus } from "./api/types";
 const getErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "Something went wrong.";
 
-const formatAge = (seconds: number | null): string | null => {
+export const formatAge = (seconds: number | null): string | null => {
   if (seconds === null) return null;
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);

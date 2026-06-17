@@ -17,7 +17,7 @@ type RouteApi = {
   shape?: RouteShapePointApi[] | null;
 };
 
-const toRoute = (raw: RouteApi): Route => {
+export const toRoute = (raw: RouteApi): Route => {
   const shape = raw.shape
     ?.filter(
       (point): point is { lat: number; lon: number; sequence?: number | null } =>
