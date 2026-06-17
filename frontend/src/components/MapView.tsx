@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, Polyline, TileLayer } from "react-leaflet";
+import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import type { Route, Stop, VehicleArrivalStop, VehiclePosition } from "../api/types";
+import { buildStopMarkerHtml } from "./StopMarker";
+import { useStopDepartures } from "../hooks/useStopDepartures";
+import StopDeparturesPanel from "./StopDeparturesPanel";
 import MapBindings from "./MapBindings";
 import SelectedVehicleMarker from "./SelectedVehicleMarker";
 import VehicleMarker from "./VehicleMarker";
@@ -32,6 +35,49 @@ interface MapViewProps {
 
 const defaultCenter: [number, number] = [43.4516, -80.4925];
 const defaultZoom = 12;
+
+/** Renders upcoming departures inside a Leaflet popup. */
+function DeparturePopupContent({ stopId }: { stopId: string }) {
+  const { data: departures, isLoading } = useStopDepartures(stopId);
+  return (
+    <div className="min-w-[200px]">
+      <StopDeparturesPanel departures={departures ?? []} isLoading={isLoading} />
+    </div>
+  );
+}
+
+/**
+ * Listens for clicks on the map background (not on markers) and dismisses
+ * the currently open stop popup by toggling off the selection.
+ */
+function MapClickHandler({
+  selectedStopId,
+  onSelectStop,
+}: {
+  selectedStopId: string | null;
+  onSelectStop: (stopId: string) => void;
+}) {
+  const map = useMap();
+  const selectedStopIdRef = useRef(selectedStopId);
+  selectedStopIdRef.current = selectedStopId;
+  const onSelectStopRef = useRef(onSelectStop);
+  onSelectStopRef.current = onSelectStop;
+
+  useEffect(() => {
+    const handleClick = () => {
+      const current = selectedStopIdRef.current;
+      if (current) {
+        onSelectStopRef.current(current);
+      }
+    };
+    map.on("click", handleClick);
+    return () => {
+      map.off("click", handleClick);
+    };
+  }, [map]);
+
+  return null;
+}
 
 const buildRouteIndex = (routes: Route[]) => {
   const map = new Map<string, Route>();
@@ -180,6 +226,17 @@ export default function MapView({
   focusedStopIndexRef.current = _focusedStopIndex;
 
   const nearbyStopsCurrent = nearbyStops;
+  const markerRefs = useRef<Map<string, L.Marker>>(new Map());
+
+  // When a stop is selected (from sidebar or keyboard), open its popup
+  useEffect(() => {
+    if (selectedStopId) {
+      const marker = markerRefs.current.get(selectedStopId);
+      if (marker) {
+        marker.openPopup();
+      }
+    }
+  }, [selectedStopId]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -307,6 +364,38 @@ export default function MapView({
           onZoomToLocation={handleZoomToLocation}
           userLocationEnabled={!!userLocation}
         />
+        {nearbyStops.map((stop) => (
+          <Marker
+            key={stop.stopId}
+            position={[stop.stopLat, stop.stopLon]}
+            icon={L.divIcon({
+              html: buildStopMarkerHtml(stop.stopName ?? stop.stopId),
+              className: "",
+              iconSize: [100, 24],
+              iconAnchor: [6, 12],
+            })}
+            ref={(marker) => {
+              if (marker) {
+                markerRefs.current.set(stop.stopId, marker);
+              } else {
+                markerRefs.current.delete(stop.stopId);
+              }
+            }}
+            eventHandlers={{
+              click: () => onSelectStop(stop.stopId),
+            }}
+          >
+            <Popup>
+              <div className="min-w-[200px]">
+                <div className="font-semibold text-gray-900 text-sm mb-1 px-1">
+                  {stop.stopName ?? stop.stopId}
+                </div>
+                <DeparturePopupContent stopId={stop.stopId} />
+              </div>
+            </Popup>
+          </Marker>
+        ))}
+        <MapClickHandler selectedStopId={selectedStopId} onSelectStop={onSelectStop} />
       </MapContainer>
     </div>
   );
