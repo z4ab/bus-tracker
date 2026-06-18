@@ -439,9 +439,7 @@ class Cache:
                 "trip_routes": len(self._trip_routes),
                 "trip_updates": len(self._trip_updates),
                 "alerts": len(self._alerts),
-                "vehicle_history": sum(
-                    len(h) for h in self._vehicle_history.values()
-                ),
+                "vehicle_history": sum(len(h) for h in self._vehicle_history.values()),
             }
 
     async def get_memory_estimate(self) -> Dict[str, int]:

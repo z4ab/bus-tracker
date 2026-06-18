@@ -116,9 +116,7 @@ async def load_stop_times_for_urls(
         finally:
             await conn.close()
     except Exception:
-        logger.exception(
-            "Failed to load stop_times from cache for URLs: %s", feed_urls
-        )
+        logger.exception("Failed to load stop_times from cache for URLs: %s", feed_urls)
 
     return merged
 
