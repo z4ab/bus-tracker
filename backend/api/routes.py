@@ -117,6 +117,7 @@ class HealthResponse(BaseModel):
     last_updated: Optional[str] = None
     cache: Dict[str, int]
     feeds: Dict[str, str]
+    memory_estimate: Optional[Dict[str, int]] = None
 
 
 class VehiclesResponse(BaseModel):
@@ -221,6 +222,7 @@ async def health() -> HealthResponse:
     last_updated = await cache.get_last_updated()
     cache_sizes = await cache.get_cache_sizes()
     feed_health = await cache.get_feed_health()
+    memory_estimate = await cache.get_memory_estimate()
     return JSONResponse(
         content={
             "status": "ok",
@@ -228,6 +230,7 @@ async def health() -> HealthResponse:
             "last_updated": last_updated,
             "cache": cache_sizes,
             "feeds": feed_health,
+            "memory_estimate": memory_estimate,
         },
         headers={"Cache-Control": "no-cache"},
     )
