@@ -82,6 +82,8 @@ class FakeCache:
                 ],
             }
         }
+        self._vehicle_history = {}
+        self._previous_positions = {}
         self._last_updated = "2025-03-09T12:00:00Z"
         self._feed_health = {
             "grt_vehicle_positions": "ok",
@@ -118,10 +120,13 @@ class FakeCache:
             "vehicles": len(self._vehicles),
             "routes": len(self._routes),
             "stops": len(self._stops),
-            "stop_times": len(self._stop_times),
             "trip_routes": len(self._trip_routes),
             "trip_updates": 0,
+            "vehicle_history": 0,
         }
+
+    async def get_memory_estimate(self) -> dict:
+        return {}
 
     async def get_feed_health(self) -> dict:
         return dict(self._feed_health)
@@ -235,10 +240,11 @@ def test_health(monkeypatch) -> None:
         "vehicles": 1,
         "routes": 1,
         "stops": 1,
-        "stop_times": 2,
         "trip_routes": 2,
         "trip_updates": 0,
+        "vehicle_history": 0,
     }
+    assert data["memory_estimate"] == {}
     assert data["feeds"] == {
         "grt_vehicle_positions": "ok",
         "lrt_vehicle_positions": "ok",

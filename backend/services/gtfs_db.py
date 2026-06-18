@@ -9,7 +9,7 @@ import json
 import logging
 import os
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import aiosqlite
 
@@ -37,7 +37,8 @@ _MIGRATIONS = [
 ]
 
 
-def _get_db_path(cache_dir: Optional[str] = None) -> str:
+def get_db_path(cache_dir: Optional[str] = None) -> str:
+    """Return the path to the GTFS static cache SQLite database."""
     base = cache_dir or os.environ.get("GTFS_CACHE_DIR") or DEFAULT_CACHE_DIR
     os.makedirs(base, exist_ok=True)
     return os.path.join(base, CACHE_DB_FILENAME)
@@ -60,8 +61,9 @@ async def load_cached_static(
     feed_url: str,
     db_path: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
+    """Load the full cached static bundle for a feed URL."""
     try:
-        conn = await _get_connection(db_path or _get_db_path())
+        conn = await _get_connection(db_path or get_db_path())
         try:
             cursor = await conn.execute(
                 "SELECT last_modified, etag, routes, stops, stop_times, trip_routes FROM static_cache WHERE feed_url = ?",
@@ -86,6 +88,39 @@ async def load_cached_static(
         return None
 
 
+async def load_stop_times_for_urls(
+    feed_urls: List[str],
+    db_path: Optional[str] = None,
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Load and merge stop_times from the SQLite cache for the given feed URLs.
+
+    Returns a single dict keyed by trip_id, combining stop_times from all feeds.
+    This data is loaded on demand (not held permanently in memory).
+    """
+    merged: Dict[str, List[Dict[str, Any]]] = {}
+    resolved_db = db_path or get_db_path()
+
+    try:
+        conn = await _get_connection(resolved_db)
+        try:
+            for feed_url in feed_urls:
+                cursor = await conn.execute(
+                    "SELECT stop_times FROM static_cache WHERE feed_url = ?",
+                    (feed_url,),
+                )
+                row = await cursor.fetchone()
+                if row is not None:
+                    feed_stop_times = json.loads(row["stop_times"])
+                    for trip_id, entries in feed_stop_times.items():
+                        merged[trip_id] = entries
+        finally:
+            await conn.close()
+    except Exception:
+        logger.exception("Failed to load stop_times from cache for URLs: %s", feed_urls)
+
+    return merged
+
+
 async def save_cached_static(
     feed_url: str,
     routes: Dict[str, Any],
@@ -96,8 +131,9 @@ async def save_cached_static(
     etag: Optional[str] = None,
     db_path: Optional[str] = None,
 ) -> bool:
+    """Persist a parsed GTFS static bundle to the SQLite cache."""
     try:
-        conn = await _get_connection(db_path or _get_db_path())
+        conn = await _get_connection(db_path or get_db_path())
         try:
             await conn.execute(
                 """INSERT INTO static_cache (feed_url, last_modified, etag, routes, stops, stop_times, trip_routes, cached_at)
@@ -133,8 +169,9 @@ async def save_cached_static(
 async def clear_cache(
     feed_url: Optional[str] = None, db_path: Optional[str] = None
 ) -> bool:
+    """Clear cached static data for one or all feed URLs."""
     try:
-        conn = await _get_connection(db_path or _get_db_path())
+        conn = await _get_connection(db_path or get_db_path())
         try:
             if feed_url:
                 await conn.execute(

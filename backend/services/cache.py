@@ -3,15 +3,45 @@
 import asyncio
 import logging
 import math
+import sys
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from core.config import Settings, load_settings
-from services import gtfs_alerts, gtfs_realtime, gtfs_static
+from services import gtfs_alerts, gtfs_db, gtfs_realtime, gtfs_static
 from services.departure_query import DepartureQuery
 from services.geo_query import GeoQuery
 
 logger = logging.getLogger(__name__)
+
+
+def _deep_size(obj: Any, seen: Optional[set] = None) -> int:
+    """Recursively estimate the memory footprint of an object and its contents.
+
+    This is a best-effort approximation — it double-counts shared references
+    and doesn't account for Python's internal object caching (small ints,
+    interned strings, etc.). Useful for tracking relative memory usage
+    between cache components.
+    """
+    if seen is None:
+        seen = set()
+    obj_id = id(obj)
+    if obj_id in seen:
+        return 0
+    seen.add(obj_id)
+    try:
+        size = sys.getsizeof(obj)
+    except TypeError:
+        size = 0
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            size += _deep_size(k, seen) + _deep_size(v, seen)
+    elif isinstance(obj, (list, tuple, set, frozenset)):
+        for item in obj:
+            size += _deep_size(item, seen)
+    elif hasattr(obj, "__dict__"):
+        size += _deep_size(vars(obj), seen)
+    return size
 
 
 class Cache:
@@ -22,7 +52,7 @@ class Cache:
         self._vehicles: List[Dict[str, Any]] = []
         self._routes: Dict[str, Dict[str, Any]] = {}
         self._stops: Dict[str, Dict[str, Any]] = {}
-        self._stop_times: Dict[str, List[Dict[str, Any]]] = {}
+
         self._trip_routes: Dict[str, str] = {}
         self._trip_updates: List[Dict[str, Any]] = []
         self._last_updated: Optional[str] = None
@@ -124,7 +154,6 @@ class Cache:
         vehicles: List[Dict[str, Any]] = []
         routes: Dict[str, Dict[str, Any]] = {}
         stops: Dict[str, Dict[str, Any]] = {}
-        stop_times: Dict[str, List[Dict[str, Any]]] = {}
         trip_routes: Dict[str, str] = {}
         trip_updates: Optional[List[Dict[str, Any]]] = None
         any_failure = False
@@ -207,7 +236,6 @@ class Cache:
                 )
                 routes = bundle.get("routes", {})
                 stops = bundle.get("stops", {})
-                stop_times = bundle.get("stop_times", {})
                 trip_routes = bundle.get("trip_routes", {})
                 self._feed_health["grt_static"] = "ok"
             except Exception:
@@ -223,11 +251,9 @@ class Cache:
                     )
                     lrt_routes = lrt_bundle.get("routes", {})
                     lrt_stops = lrt_bundle.get("stops", {})
-                    lrt_stop_times = lrt_bundle.get("stop_times", {})
                     lrt_trip_routes = lrt_bundle.get("trip_routes", {})
                     routes.update(lrt_routes)
                     stops.update(lrt_stops)
-                    stop_times.update(lrt_stop_times)
                     trip_routes.update(lrt_trip_routes)
                     self._feed_health["lrt_static"] = "ok"
                 except Exception:
@@ -246,8 +272,6 @@ class Cache:
                 self._routes = routes
             if stops:
                 self._stops = stops
-            if stop_times:
-                self._stop_times = stop_times
             if trip_routes:
                 self._trip_routes = trip_routes
             self._last_updated = timestamp
@@ -378,19 +402,24 @@ class Cache:
         route_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         await self.ensure_fresh()
+        # Load stop_times from SQLite on demand instead of keeping in memory.
+        # This is the single biggest memory optimisation — stop_times is a
+        # dict of ~500k entries that consumes ~300 MB as Python objects.
+        feed_urls = [self._settings.GRT_GTFS_STATIC_URL]
+        if self._settings.LRT_GTFS_STATIC_URL:
+            feed_urls.append(self._settings.LRT_GTFS_STATIC_URL)
+        stop_times = await gtfs_db.load_stop_times_for_urls(feed_urls)
+
         async with self._lock:
             trip_updates_snapshot = [dict(u) for u in self._trip_updates]
             stops_snapshot = {sid: dict(info) for sid, info in self._stops.items()}
-            stop_times_snapshot = {
-                tid: list(entries) for tid, entries in self._stop_times.items()
-            }
             trip_routes_snapshot = dict(self._trip_routes)
             routes_snapshot = {rid: dict(info) for rid, info in self._routes.items()}
         return self._departure.get_stop_departures(
             stop_id,
             trip_updates_snapshot,
             stops_snapshot,
-            stop_times_snapshot,
+            stop_times,
             trip_routes_snapshot,
             routes_snapshot,
             limit=limit,
@@ -407,10 +436,28 @@ class Cache:
                 "vehicles": len(self._vehicles),
                 "routes": len(self._routes),
                 "stops": len(self._stops),
-                "stop_times": len(self._stop_times),
                 "trip_routes": len(self._trip_routes),
                 "trip_updates": len(self._trip_updates),
                 "alerts": len(self._alerts),
+                "vehicle_history": sum(len(h) for h in self._vehicle_history.values()),
+            }
+
+    async def get_memory_estimate(self) -> Dict[str, int]:
+        """Return approximate per-component memory usage in bytes.
+
+        Uses a recursive size walker on each major cache data structure.
+        These are best-effort estimates, not exact measurements.
+        """
+        async with self._lock:
+            return {
+                "vehicles": _deep_size(self._vehicles),
+                "routes": _deep_size(self._routes),
+                "stops": _deep_size(self._stops),
+                "trip_routes": _deep_size(self._trip_routes),
+                "trip_updates": _deep_size(self._trip_updates),
+                "alerts": _deep_size(self._alerts),
+                "vehicle_history": _deep_size(self._vehicle_history),
+                "previous_positions": _deep_size(self._previous_positions),
             }
 
     async def get_feed_health(self) -> Dict[str, str]:
